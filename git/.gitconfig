@@ -3,3 +3,5 @@
 [user]
 	name = malcolm cook
 	email = malcolm_cook@gmail.com
+[push]
+	default = simple

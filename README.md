@@ -1,7 +1,7 @@
 Managing dotfiles with
  + gnu stow
  + gnu make
- + git / githu
+ + git / github
 
 
 inspiration from:

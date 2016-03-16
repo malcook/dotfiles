@@ -4,10 +4,6 @@
 					; anyone is calling
 					; emacsclient right away
 
-(use-package edit-server :ensure t
-  ;; for editting fields in chrome
-  :init (edit-server-start))
-
 (setq load-prefer-newer t)	     ; don't load .elc if .el file is newer
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,6 +36,10 @@
 
 ;(add-to-list 'package-archives '("elpy" . "http://jorgenschaefer.github.io/packages/") t) ; for use by elpy
 (package-initialize)
+
+(use-package edit-server :ensure t
+  ;; for editting fields in chrome
+  :init (edit-server-start))
 
 (use-package ess :ensure t
   :config (progn (require 'ess-site)
