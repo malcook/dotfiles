@@ -1,0 +1,1 @@
+/home/mec/project/confluence/.profile

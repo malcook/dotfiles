@@ -1,5 +1,5 @@
 # ~/.profile: executed by the command interpreter for login shells.
-
+time > ~/date.log
 # This file is not read by bash(1), if ~/.bash_profile or ~/.bash_login
 # exists.  In my case ~/.bash_profile exists.
 
@@ -29,3 +29,8 @@ fi
 
 
 
+## following should probably be
+if which pyenv > /dev/null; then eval "$(pyenv init -)"; fi
+## without which:
+## pyenv shell 2.7.13
+## pyenv: no such command `shell'
