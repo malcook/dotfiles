@@ -1,7 +1,10 @@
-[color]
-	ui = true
 [user]
-	name = malcolm cook
-	email = malcolm_cook@gmail.com
-[push]
-	default = simple
+	name = Cook, Malcolm
+	email = MEC@stowers.org
+# [push]
+# 	default = simple
+[http]
+	sslVerify = false
+	postBuffer = 524288000
+[https]
+	postBuffer = 524288000

@@ -1,90 +1,1139 @@
 ;;; init.el --- user init file      -*- no-byte-compile: t -*-
+
+;; orgmode hell
+;(delete "/n/apps/CentOS7/install/emacs-26.1/share/emacs/26.1/lisp/org" load-path)
+;;[[https://lists.defectivebydesign.org/archive/html/emacs-orgmode/2016-08/msg00138.html][;; How to safely update from ver. 8.2.10 to 8.3.x]]
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (server-start)				; do this early on in-case
 					; anyone is calling
 					; emacsclient right away
 
+;;; TODO: consider move to https://github.com/raxod502/straight.el -
+;;; straight.el: next-generation, purely functional package manager
+;;; for the Emacs hacker.
+
+(setq debug-on-error t) ;;
+(setq stack-trace-on-error t);; '(buffer-read-only))
+(setq debug-on-error nil) ;;
+(setq stack-trace-on-error nil);; '(buffer-read-only))
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; PACKAGE SYTEM INIT
+(require 'package)
+(setq package-check-signature nil)
+(when nil
+    (setq package-archives nil)
+    (add-to-list 'package-archives '("gnu" . "https://elpa.gnu.org/packages/") t) ;; this is the default
+    )
+
+(add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/") t) ; which includes ox-pandoc use-package and ess inter-alia
+;;(add-to-list 'package-archives '("melpa-stable" . "http://stable.melpa.org/packages/")) ; which includes ox-pandoc use-package and ess inter-alia
+(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/") t) ; (formerly?) for org-plus-contrib
+;;(add-to-list 'package-archives '("marmalade" . "http://marmalade-repo.org/packages/"))
+;;(setq gnutls-algorithm-priority  "NORMAL:-VERS-TLS1.3")
+
+;; (setq package-archives '(("melpa" . "http://melpa.milkbox.net/packages/")
+;; 			 ("org" . "http://orgmode.org/elpa/")
+;;                          ("gnu" . "http://elpa.gnu.org/packages/")))
+
+(package-initialize)
+;;(package-refresh-contents)
+(eval-when-compile
+  ;; Bootstrap `use-package'
+  (unless (package-installed-p 'use-package)
+    (package-refresh-contents)
+    (package-install 'use-package))
+
+  ;; Following line is not needed if use-package.el is in ~/.emacs.d
+  ;;(add-to-list 'load-path "<path where use-package is installed>")
+  (require 'use-package))
+
+;; (use-package quelpa)
+;; (quelpa
+;;  '(quelpa-use-package
+;;    :fetcher git
+;;    :url "https://framagit.org/steckerhalter/quelpa-use-package.git"))
+
+;; (quelpa
+;;  '(quelpa-use-package
+;;    :fetcher git
+;;    :url "https://framagit.org/steckerhalter/quelpa-use-package.git"))
+
+;; (require 'quelpa-use-package)
+
+(setq use-package-always-ensure
+       t ;; maybe/seems to get in way of  :ensure org-plus-contrib
+       ;;'quelpa
+       )
+
+;; if we go back to trying this, probably want to first (use-package ess)
+;; (if t
+;;     (use-package auto-package-update
+;;       ;; per advice:
+;;       ;; https://emacs.stackexchange.com/questions/31872/how-to-update-packages-installed-with-use-package/31904#31904
+;;       ;; but see my comment about the progn.
+      
+;;       :config (progn
+;; 		(setq auto-package-update-delete-old-versions t
+;; 		      auto-package-update-interval 1)
+;; 		(auto-package-update-maybe)
+;; 		)
+;;       ))
+
+;; (use-package company
+;;   ;; used for emacs completeion in ESS 
+;;   )
+;; (use-package ido
+;;   ;; used for emacs completeion in ESS 
+;;   )
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(use-package clojure-mode)		; dependency of ejc-sql
+(use-package ejc-sql )			;[[https://github.com/kostafey/ejc-sql#basic-use-case][Emacs SQL client uses Clojure JDBC.]]
+(add-hook 'ejc-sql-minor-mode-hook
+          (lambda ()
+            (auto-complete-mode t)
+            (ejc-ac-setup)))
+(add-hook 'ejc-sql-minor-mode-hook
+          (lambda ()
+            (ejc-eldoc-setup)))
+(add-hook 'ejc-sql-connected-hook
+          (lambda ()
+            (ejc-set-fetch-size 50)
+            (ejc-set-max-rows 50)
+            (ejc-set-column-width-limit 25)))
+(setq ejc-result-table-impl 'orgtbl-mode)
+
+(use-package ess
+  :config (progn ;(require 'ess-site) ; was require
+		 
+		 ;; add whatever else you like here to run after ess
+		 ;; mode is loaded:
+		 (setq ess-default-style 'DEFAULT) ; which I prefer over RRR settings
+		 (setq ess-eval-visibly t)
+		 ))
+
+;; ;; start auto-complete with emacs
+;; (use-package auto-complete)
+;; ;; do default config for auto-complete
+;; (require auto-complete-config)
+;; (ac-config-default)
+;; (setq ac-delay 0.1)       
+;; (setq ac-auto-show-menu 0.2)
+;; (setq ac-quick-help-delay 0.2)
+;; (setq ac-quick-help-height 10)
+;; (setq ac-candidate-limit 100)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                  LITERATE PROGRAMMING AND DOCUMENTS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun rmarkdown-render (buffer-file-name) ;;(begin-region end-region buf)
+  ;;
+  "run rmarkdown::render() on the current file and display results in buffer *Shell Command Output*"
+  (interactive)
+  (let ((render-command (read-string "render command:" 
+				     (format "render('%s',%s);"
+					     (shell-quote-argument buf)
+					     "'all'"
+					     ))))
+    (shell-command
+     (message
+      "Rscript -e \"withCallingHandlers({library(rmarkdown); %s}, error = function(e) {print(sys.calls())})\""
+      ;;print(sessionInfo())
+      render-command
+      )
+     "*rmarkdown::render standard output*"
+     ;;"*rmarkdown::render error output*"
+     )
+    ))
+
+;(use-package pandoc-mode )
+
+;;(use-package impatient-mode)
+
+(use-package markdown-mode
+  ;;"Major mode for editing Markdown files"
+;;; c.f. http://jblevins.org/projects/markdown-mode/
+  ;;
+  :commands (markdown-mode gfm-mode)
+  :mode (("README\\.md\\'" . gfm-mode)
+         ("\\.md\\'" . markdown-mode)
+         ("\\.markdown\\'" . markdown-mode))
+  :init (setq markdown-command "multimarkdown")
+  :config (progn
+	  ;; (add-to-list 'auto-mode-alist '("\\.text\\'" . markdown-mode))
+	  ;; (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-mode))
+	  ;; (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-mode))
+	    (add-to-list 'auto-mode-alist '("\\.Rmd" . markdown-mode))
+	  ;;(define-key markdown-mode-map [(control c) (control c) (r)] 'rmarkdown-render)
+	  (define-key markdown-mode-map  (kbd "C-c C-r r") 'rmarkdown-render)
+	  ;;(define-key markdown-mode-map (kbd "C-c C-c r") 'rmarkdown-render)
+	  ;;(define-key map "\C-c\C-al" 'markdown-insert-link)
+	  ;;(setq markdown-css-path
+	  ;;(setq markdown-mode-hook nil)
+	  ;;(add-hook 'markdown-mode-hook 'orgstruct-mode)
+	  ;;(add-hook 'markdown-mode-hook 'orgstruct++-mode)
+
+	  ;;(add-hook 'markdown-mode-hook 'pandoc-mode)
+	  ;;(add-hook 'markdown-mode-hook 'orgtbl-mode)
+	  ;;(add-hook 'markdown-mode-hook 'turn-on-orgtbl)
+	  ))
+
+(use-package   lorem-ipsum )
+
+(use-package  org ;org-plus-contrib			; instead of org-mode
+  :ensure org-plus-contrib ; following http://emacs.stackexchange.com/questions/7890/org-plus-contrib-and-org-with-require-or-use-package
+					;  :bind (("C-c l" . org-store-link))
+  :config  (progn
+	     (setq org-element-use-cache nil)
+	     ;;"the cache can become corrupted upon modifying outline structure
+	     ;;of a document. Unfortunately, I couldn't come with a small
+	     ;;enough recipe to reproduce the exact problem. You could try to
+	     ;;set `org-element-use-cache' to nil and see if the hangs
+	     ;;disappear.
+
+;;; PUT YOUR OTHER ORG MODE CUSTOMIZATIONS HERE.  THEY MAY BE DIFFERENT FROM MINE!
+	     (setq org-default-notes-file "~/NOTES.org") ; instead of "~/notes" (which lacks an .org extension)
+	     (define-key global-map "\C-cc" 'org-capture) ; TODO? use bind:
+	     (setq org-startup-folded t)		  ; used to be the default.
+	     (setq  org-confirm-babel-evaluate nil ;don't require confirmation to
+;;;eval code.
+		    org-babel-no-eval-on-ctrl-c-ctrl-c t ; But C-c C-v e will still
+					; do it (just don't make
+					; it soooo easy)
+		    org-use-speed-commands t
+		    org-edit-src-content-indentation 0 ; don't indent org source blocks
+		    org-src-preserve-indentation t ; The nil default can sometimes be irksome in ESS.
+		    )
+	     ;;(setq org-html-wrap-src-lines nil) ; wrap code on export to html.  Arguably a bad idea. Let's try it!
+	     (setq org-return-follows-link t)
+	     (setq org-tab-follows-link t)
+	     (require 'ox-latex)
+	     (unless (boundp 'org-latex-classes)
+	       (setq org-latex-classes nil))
+	     ;; (add-to-list 'org-latex-classes
+	     ;; 		  '("article"
+	     ;; 		    "\\documentclass{article}"
+	     ;; 		    ("\\section{%s}" . "\\section*{%s}")))
+	     (setq org-html-postamble nil ; 'auto
+		   org-latex-postamble nil)
+	     (setq org-latex-table-caption-above nil)
+
+	     ;(use-package org-attach-git) ;; when i'm ready to fathom auto inclusion of attachments
+	     (use-package org-pdfview
+	       
+	       :config (progn 
+			 (add-to-list 'org-file-apps '("\\.pdf\\'" . (lambda(file link) (org-pdfview-open link))))
+			 (add-to-list 'org-file-apps '("\\.pdf::\\([[:digit:]]+\\)\\'" . (lambda(file link) (org-pdfview-open link))))))
+	     ;;(use-package org-screenshot)
+	     (use-package org-attach-screenshot :bind (("<C-print>" .  org-attach-screenshot)))
+	     (setq org-html-allow-name-attribute-in-anchors t)
+	     
+	     (setq org-html-doctype "html5")
+	     ;;(use-package ox-ruby )
+	     ;;;;(use-package ox-twbs )	; twitter-bootstrap compat
+	     (use-package ox-pandoc
+	       :config  (progn
+			  (setq org-pandoc-options '((standalone . t)))
+			  ;; cancel above settings only for 'docx' format
+			  (setq org-pandoc-options-for-docx '((standalone . nil)))
+			  ;; special settings for beamer-pdf and latex-pdf exporters
+			  (setq org-pandoc-options-for-beamer-pdf '((pdf-engine . "xelatex")))
+			  (setq org-pandoc-options-for-latex-pdf '((pdf-engine . "xelatex")))
+			  ))
+	     ;; ctrl+space does not work in emacs?
+	     ;; should get fixed.  For now:
+	     ;; > ibus exit
+	     ;; or > apt-get uninstall ibux-???
+	     ;; or xmodkeymap something
+	     ;; c.f. https://bugs.launchpad.net/ubuntu/+source/ibus/+bug/1278569
+	     ;;(use-package org-compat)
+	     (require 'ob-shell)
+	     ;;(require 'ob-ditaa)
+	     ;;(use-package ob-lua)
+	     (require 'ob-R)
+	     ;;;;(require 'ob-ruby)
+					;(require 'org-ruby)
+	     ;;(require 'inf-ruby)
+	     (require 'ob-python )
+	     ;; (use-package ob-dot)
+	     ;; (use-package ob-screen)
+	     (require 'ob-perl)
+	     (require 'ob-org)
+
+	     (add-to-list 'org-latex-packages-alist '("" "minted"))
+	     ;; Tell the latex export to use the minted package for source
+	     ;; code coloration.
+	     (setq org-latex-listings 'minted)
+	     ;; Let the exporter use the -shell-escape option to let latex
+	     ;; execute external programs.
+	     ;; This obviously and can be dangerous to activate!
+	     (setq org-latex-pdf-process
+	     	   '(
+		     ;;"latex -interaction nonstopmode -output-directory %o %f" "%latex -interaction nonstopmode -output-directory %o %f" "%latex -interaction nonstopmode -output-directory %o %f"
+		     "xelatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+		     )
+		   )
+	     
+	     (setq org-latex-to-pdf-process
+		   '("xelatex -interaction nonstopmode -output-directory %o %f"
+		     "xelatex -interaction nonstopmode -output-directory %o %f"))
+
+	     (setq org-link-abbrev-alist
+		   '(("bugzilla" . "http://10.1.2.9/bugzilla/show_bug.cgi?id=")
+		     ("google"    . "http://www.google.com/search?q=") ;; [[google:OrgMode]]
+		     ("ads"    . "http://adsabs.harvard.edu/cgi-bin/nph-abs_connect?author=%s&db_key=AST")
+		     ("servicenow"    . "https://stowers.service-now.com/task.do?sys_id=%s")
+		     ("bioinfo" . "http://bioinfo%s")
+		     ))
+
+
+	     (setq org-log-done nil) ;; 'note => stamp TODOs when done and prompt for closing 'note'
+	     
+	     (setq org-todo-keywords
+		   ;;'((sequence "IDEA" "TODO(t)" "WAIT(w@/!)" "ONIT" "|" "DONE(d!)" "DROP(c@)" ))
+		   ;;'((sequence "TODO(t)" "WAIT(w@/)" "ONIT" "|" "DONE(d)" "DROP(c@)" ))
+		   ;;
+		   ;; DON'T USE TIMESTAMPS OR NOTES AT ALL and use (4
+		   ;; letter) VOID instead of DROP.  Also
+		   ;; considered: scrap, recant, drop, cancel...
+		   '((sequence "IDEA(i)" "TODO(t)" "WAIT(w)" "ONIT(o)" "EVAL(e)" "|" "DONE(d)" "DROP(r)" ))
+		   )
+	     (define-key org-mode-map "\C-c2" 'org-babel-demarcate-block)
+	     (define-key global-map "\C-c2" 'org-babel-demarcate-block)
+
+	     ;; (add-hook 'org-mode-hook #'flyspell-mode) ;; slows things?
+	     ;; (use-package ox-reveal
+	     ;;  error in emacs 24!?!?
+	     ;;   ;; export org into nice html presentation's 
+	     ;;   :config (progn
+	     ;; 		(setq org-reveal-root "http://cdn.jsdelivr.net/reveal.js/2.5.0/")
+	     ;; 		))
+	     (use-package org-tree-slide ; NB -
+	       :config (progn 
+			 (global-set-key (kbd "<f8>") 'org-tree-slide-mode)
+			 (global-set-key (kbd "S-<f8>") 'org-tree-slide-skip-done-toggle)
+			 (define-key org-tree-slide-mode-map  "left" 'org-tree-slide-move-previous-tree)
+			 (define-key org-tree-slide-mode-map  "right" 'org-tree-slide-move-next-tree)
+			 ;;(org-tree-slide-presentation-profile)
+			 (org-tree-slide-simple-profile)
+			 ;;(etq org-tree-slide-slide-in-effect
+			 ;;(org-tree-slide-simple-profile)
+			 ;; 			;;(org-tree-slide-narrowing-control-profile)
+
+			 ))
+
+	     (require 'ox-confluence) 
+	     (require 'ox-ascii)
+	     ;;(use-package ox-ravel)	;allowing export from org to Rmd
+	     ;;(use-package orgmode-accessories)	;allowing export from org to Rmd
+	     (require 'ox-beamer)
+	     ;;(use-package ox-qmd)
+	     (require 'ox-md)
+
+	     (defun org-confluence-src-block (src-block contents info)
+	       ;; mec: till then, replace hard-wired theme from emacs to Default
+	       ;; FIXME: provide a user-controlled variable for theme
+	       (let* ((lang (org-element-property :language src-block))
+		      (language (if (or (string= lang "sh") (string= lang "shell")) "bash" ;; FIXME: provide a mapping of some sort
+				  lang))
+		      (content (org-export-format-code-default src-block info)))
+		 (org-confluence--block language "Default" content)))
+
+	     (use-package org-download)
+	     ;;(use-package org-preview-html)  (org-preview-html-mode)g
+	     (use-package orglink) ;; use Org Mode links in other modes
+	     ;;(use-package ox-clip)
+	     (use-package ox-clip :bind
+	       (("s-w" .  ox-clip-formatted-copy
+		 ;; NB: requires version of xclip supporting -t.
+		 ;; CentOS7 is too old.  this works:
+		 ;; https://houtianze.github.io/xclip/xsel/centos/redhat/yum/2017/03/08/xclip-xsel-on-yum-centos-redhat.html
+		 )))
+
+
+	     ;; (use-package ox-gfm
+	     ;; somehow seems to remove ox-md
+	     ;;   :init
+	     ;;   ;;(when (boundp 'org-export-backends)
+	     ;;   (customize-set-variable '
+	     ;;    org-export-backends
+	     ;;    (cons 'gfm org-export-backends))
+	     ;;   ;;)
+	     ;;   )
+	     ;;)
+	     ;;[[https://github.com/jkitchin/org-ref/issues/428][You probably need these libraries loaded to export]] the org refcard
+	     (require 'org-id)
+	     (setq org-id-link-to-org-use-id 'create-if-interactive-and-no-custom-id
+		   org-id-method 'org)
+	     ;; Based on org-expiry-insinuate
+	     (add-hook 'org-insert-heading-hook 'org-id-get-create)
+	     (add-hook 'org-after-todo-state-change-hook 'org-id-get-create)
+	     (add-hook 'org-after-tags-change-hook 'org-id-get-create)
+	     (defun my/org-update-ids ()
+	       ;; kudos: https://emacs.stackexchange.com/questions/614/creating-permalinks-for-sections-in-html-exported-from-org-mode
+	       (interactive)
+	       (let* ((tree (org-element-parse-buffer 'headline))
+		      (map (org-element-map tree 'headline
+			     (lambda (hl)
+			       (org-element-property :begin hl)))))
+		 (save-excursion
+		   (cl-loop for point in map do
+			    (goto-char point)
+			    (org-id-get-create nil ;; consider t to replace all - or condition on numeric-prefix
+					       )))))
+
+	     (use-package org-ref)
+	     ;;(require 'org-ref-wos)
+	     ;; (require 'org-ref-scopus)
+	     ;; (require 'org-ref-pubmed)
+
+	     (use-package org-present)
+
+	     (defun org-cycle-hide-drawers (state)
+	       ;; kudos https://stackoverflow.com/questions/17478260/completely-hide-the-properties-drawer-in-org-mode
+	       "Re-hide all drawers after a visibility state change."
+	       (when (and (derived-mode-p 'org-mode)
+			  (not (memq state '(overview folded contents))))
+		 (save-excursion
+		   (let* ((globalp (memq state '(contents all)))
+			  (beg (if globalp
+				   (point-min)
+				 (point)))
+			  (end (if globalp
+				   (point-max)
+				 (if (eq state 'children)
+				     (save-excursion
+				       (outline-next-heading)
+				       (point))
+				   (org-end-of-subtree t)))))
+		     (goto-char beg)
+		     (while (re-search-forward org-drawer-regexp end t)
+		       (save-excursion
+			 (beginning-of-line 1)
+			 (when (looking-at org-drawer-regexp)
+			   (let* ((start (1- (match-beginning 0)))
+				  (limit
+				   (save-excursion
+				     (outline-next-heading)
+				     (point)))
+				  (msg (format
+					(concat
+					 "org-cycle-hide-drawers:  "
+					 "`:END:`"
+					 " line missing at position %s")
+					(1+ start))))
+			     (if (re-search-forward "^[ \t]*:END:" limit t)
+				 (outline-flag-region start (point-at-eol) t)
+			       (user-error msg))))))))))
+	     (use-package hide-mode-line)
+	     ;;(add-to-list 'load-path "~/path/to/org-present")
+	     (autoload 'org-present "org-present" nil t)
+	     (setq org-present-mode-hook nil
+		   org-present-mode-quit-hook nil)
+	     (eval-after-load "org-present"
+	       '(progn
+		  (add-hook ' org-present-mode-hook
+			    (lambda ()
+			      (org-cycle-hide-drawers 'all)
+			      (hide-mode-line-mode)
+			      (org-present-big)
+			      (org-display-inline-images)
+			      (org-present-hide-cursor)
+			      (org-present-read-only)))
+		  (add-hook 'org-present-mode-quit-hook
+			    (lambda ()
+			      (hide-mode-line-mode)
+			      (org-present-small)
+			      (org-remove-inline-images)
+			      (org-present-show-cursor)
+			      (org-present-read-write)))))
+	     (add-to-list ' org-structure-template-alist '("r" . "src R"))
+	     ;;(use-package org-temp)	; so "<r" expands in addition to C-c C-,
+
+	     ;;(use-package ob-sql )
+	     (require 'ob-sql)
+	     ;;(use-package ob-sql-mode )
+	     )
+
+
+
+  ;; (defun org-html-export-img-without-p-tag (s backend info)
+  ;;   ;; to be used as an org-export-filter-final-output-functions
+  ;;   ;; kudos: https://emacs.stackexchange.com/a/27705/9140
+  ;;   (when (org-export-derived-backend-p backend 'html)
+  ;;     (replace-regexp-in-string "<p>\\(?1:<img[^<]+\\)</p>"
+  ;; 				"\\1" s)))
+  ;; (add-to-list 'org-export-filter-final-output-functions
+  ;;            'org-html-export-img-without-p-tag)
+
+;; (use-package  org-link-minor-mode )
+;;   (add-hook 'emacs-lisp-mode-hook 'org-link-minor-mode)
+   )
+
+
+
+
+;;(add-hook 'text-mode-hook 'turn-on-orgtbl)
+
+;; *.Rmd files invoke r-mode                    ; Temporary fix for R markdown files
+;;(add-to-list 'auto-mode-alist '("\\.Rmd$" . r-mode))
+; commented while trying out:
+
+;; (use-package pander-mode
+;;   :config (progn
+;; 	  (add-hook 'markdown-mode-hook 'pander-mode)
+;; 	  (add-hook 'pandoc-mode-hook
+;; 		    ;; checks if a default settings file exists for the file
+;; 		    ;; being loaded and reads its settings if it finds one.
+;; 		    'pandoc-load-default-settings)
+;; 	  ))
+
+
+;; (use-package confluence
+;; COMMENTED COZ local-set-key seems to be global in text mode.  very strange.
+;;
+;;   :config (progn
+;; 	    (setq confluence-url "https://confluencedev/rpc/xmlrpc"
+;; 		  confluence-default-space-alist (list (cons confluence-url "SSU")))
+;; 	    (add-hook 'confluence-edit-mode-hook
+;; 		      (local-set-key "\C-xw" confluence-prefix-map)
+;; 		      (local-set-key "\M-j" 'confluence-newline-and-indent)
+;; 		      (local-set-key "\M-;" 'confluence-list-indent-dwim))
+;; 	      ))
+;; (global-set-key "\C-xwf" 'confluence-get-page)
+
+
+
+
+;;(unload-feature 'outshine)
+
+;; * zxcv
+;; [[https://github.com/alphapapa/outshine][Outshine]] 
+;; ** zxcv
+;; ** asdf
+
+;; (defvar outline-minor-mode-prefix "\M-#") ; default is C-c @
+;; (use-package outshine
+;;   ;; c.f. https://github.com/alphapapa/outshine
+;;   :quelpa (outshine :fetcher github :repo "alphapapa/outshine")
+;;   )
+;(add-hook 'outline-minor-mode-hook 'outshine-hook-function)
+;(add-hook 'emacs-lisp-mode-hook 'outshine-mode)
+
+
+;;(require 'org-link-minor-mode)
+;; try to enable org-link-minor-mode whenever outshine-mode is on
+;; we really only want it in commends - have not figured out how to control this yet
+;(add-hook 'outshine-hook-function 'org-link-minor-mode)
+
+;;(use-package writeroom-mode )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (use-package org-publish)
+;; (setq org-publish-project-alist
+;;       '(
+;; 	("sciproj"
+;; 	 :base-directory "~/???/"
+;; 	 :base-extension "org"
+;; 	 :publishing-directory "~/???/"
+;; 	 :recursive t
+;; 	 :publishing-function org-publish-org-to-html
+;; 	 :headline-levels 4             ; Just the default for this project.
+;; 	 :auto-preamble t
+;; 	 )
+;; 	))
+
+;; (setq auto-mode-alist nil)
+
+(use-package polymode
+  :config (progn
+  	    ;;(push (car (directory-files "~/.dotfiles/emacs/.emacs.d/elpa/" t "polymode-*")) load-path)
+	    (use-package poly-org )
+	    (use-package poly-markdown )
+
+	    (use-package poly-R )
+	    ;;(require 'poly-noweb)
+	    (defun polymode-end-of-chunk (&optional ignore)
+	      "Go to end of current chunk.
+"
+	      (interactive "p")
+	      (pm-goto-span-of-type '(tail) 0)
+	      (pm-switch-to-buffer))
+	    (define-key polymode-mode-map [(meta n) (e)] ' polymode-end-of-chunk)
+	    ;; (defun polymode-start-of-chunk (&optional ignore)
+	    ;; 	      "Go to start of current chunk.
+	    ;; "
+	    ;; 	      (interactive "p")
+	    ;; 	      (pm-goto-span-of-type '(head) 0)
+	    ;; 	      ;; ;; If head/tail end before eol we move to the next line
+	    ;; 	      ;; (when (looking-at "\\s *$")
+	    ;; 	      ;; 	(forward-line 1))
+	    ;; 	      (pm-switch-to-buffer))
+	    ;; 	    	    (define-key polymode-mode-map [(meta n) (s)] ' polymode-start-of-chunk)
+
+	    ;; flaky? experimental? autoswitch between modes
+	    ;; within .org file
+	    ;;(define-key polymode-mode-map [(meta n) (r)] 'rmarkdown-render)
+	    ;;(define-key polymode-mode-map [(r)] 'self-insert-command)
+	    ;;   (if nil (use-package polymode-configuration)
+	    ;; 	      ;; 
+	    ;; 	      ;; else, choose suits your needs and place into your .emacs file.
+	    ;; ;;; MARKDOWN
+	    ;; 	      (add-to-list 'auto-mode-alist '("\\.md" . poly-markdown-mode))
+	    ;; ;;; ORG
+	    ;; ;;; it seems to disrupt auto format/highligh buffer
+	    ;; ;;;	      (add-to-list ' auto-mode-alist '("\\.org" . poly-org-mode))
+	    ;; (delete '("\\.org$" . poly-org-mode)
+	    ;; 	      ;; workaround for bug: https://github.com/polymode/polymode/issues/177
+	    ;; 	      auto-mode-alist)
+	    ;; ;;	      (alist-get  "\\.org$"  auto-mode-alist) nil)
+
+	    ;; ;;; R related modes
+	    ;; 	      (add-to-list 'auto-mode-alist '("\\.Snw" . poly-noweb+r-mode))
+	    ;; 	      (add-to-list 'auto-mode-alist '("\\.Rnw" . poly-noweb+r-mode))
+	    ;;	    (add-to-list 'auto-mode-alist '("\\.Rmd\\" . poly-markdown+R-mode))
+	    (add-to-list 'auto-mode-alist '("\\.Rmd$" . poly-markdown+r-mode))
+	    ;;(setq auto-mode-alist nil)
+	    ;; 	      ;; (add-to-list 'auto-mode-alist '("\\.rapport" . poly-rapport-mode))
+	    ;; 	      ;; (add-to-list 'auto-mode-alist '("\\.Rhtml" . poly-html+r-mode))
+	    ;; 	      ;; (add-to-list 'auto-mode-alist '("\\.Rbrew" . poly-brew+r-mode))
+	    ;; 	      ;; (add-to-list 'auto-mode-alist '("\\.Rcpp" . poly-r+c++-mode))
+	    ;; 	      ;; (add-to-list 'auto-mode-alist '("\\.cppR" . poly-c++r-mode))
+	    ;;(provide 'polymode-configuration);; old way of indicating it is configured?
+	    
+ 	    (setq polymode-exporter-output-file-format "%s") ;; instead of default "%s[exported]"1
+	    (setq poly-lock-mode t) ; else getting errors on fontification - drat
+
+	    (defun poly-lock-adjust-span-face (span)
+	      ;; a patch - shouyld not be needed for long.
+	      ;; Turns out the issue is caused by the new face property called :extend, which appears in Emacs 27.0.60+:
+	      ;; ** New face attribute ':extend' to control face extension at EOL.
+	      ;; The new face attribute ':extend' controls whether to use the face for
+	      ;; displaying the empty space beyond end of line (EOL) till the edge of
+	      ;; the window.  By default, this attribute is non-nil only for a small
+	      ;; number of faces, notably, 'region'; any other face that crosses end of
+	      ;; line will not affect the display of the empty space at EOL.  This is
+	      ;; to make Emacs behave more like other GUI applications with respect to
+	      ;; displaying faces that cross line boundaries.
+
+	      "Adjust 'face property of SPAN..
+How adjustment is made is defined in :adjust-face slot of the
+SPAN's chunkmode."
+	      (interactive "r")
+	      (let ((face (pm-get-adjust-face (nth 3 span) (car span))))
+		(let ((face (if (numberp face)
+				(unless (= face 0)
+				  (list (list
+					 :background (poly-lock--adjusted-background face)
+					 :extend t ;; added this line
+					 )))
+			      face)))
+		  (when face
+		    (font-lock-append-text-property
+		     (nth 1 span) (nth 2 span) 'face face)))))
+
+	    ))
+
+;;; Removes gui elements ;;;;
+(if (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))  ; no gui scrollbars
+;;(menu-bar-no-scroll-bar)
+(if (fboundp 'tool-bar-mode) (tool-bar-mode -1))      ; no toolbar!
+;;(if (fboundp 'menu-bar-mode) (menu-bar-mode 0))     ; no menubar - use f10 and tmm
+;;;  SELECTION / CLIPBOARD / THE MOUSE & X -  c.f. http://www.emacswiki.org/emacs/CopyAndPaste
+(setq select-enable-primary t);  - default nil; set this to t if you want the Emacs commands C-w and C-y to use the primary selection.
+(setq select-enable-clipboard t);- default t; set this to nil if you want the Emacs commands C-w and C-y to use the clipboard selection.
+(setq interprogram-paste-function 'x-cut-buffer-or-selection-value)
+
+(use-package mouse-copy)
+(global-set-key [C-down-mouse-1] 'mouse-drag-secondary-pasting)
+(global-set-key [C-S-down-mouse-1] 'mouse-drag-secondary-moving)
+
+(unless window-system
+  (xterm-mouse-mode t)
+  (use-package xclip
+    :config (progn
+	      (xclip-mode 1) ;; if not xwindows I guess - http://www.lingotrek.com/2010/12/integrating-emacs-with-x11-clipboard-in.html
+	      ))
+  )
+
+;;; apa stop here
+
+
+;; (unless nil; (package-installed-p 'polymode)
+;;   (package-install 'polymode))
+;; (unless nil ; (package-installed-p 'poly-markdown)
+;;   (package-install 'poly-markdown))
+;; (unless nil ; (package-installed-p 'poly-noweb)
+;;   (package-install 'poly-noweb))
+;; (unless nil ; (package-installed-p 'markdown-mode)
+;;   (package-install 'markdown-mode))
+;; (unless nil ; (package-installed-p 'python-mode)
+;;   (package-install 'python-mode))
+
+
+(use-package pdf-tools
+ 
+  ;;will not build on centos 6.5 cf:
+  ;; https://github.com/politza/pdf-tools NB - to update this package
+  ;; - delete it and run this again.  It must be run by a sudoer and
+  ;; installs packages in the system
+  ;; :config (progn
+  ;; 	    (pdf-tools-install)
+  ;; 	    (eval-after-load 'org '(require 'org-pdfview))
+  ;; 	    (add-to-list 'org-file-apps '("\\.pdf\\'" . (lambda(file link) (org-pdfview-open link))))
+  ;; 	    (add-to-list 'org-file-apps '("\\.pdf::\\([[:digit:]]+\\)\\'" . (lambda(file link) (org-pdfview-open link))))
+  ;; 	    )
+  )
+
+;; overwrite definition from
+;; ~/.dotfiles/emacs/.emacs.d/elpa/org-plus-contrib-20181008/ob.R.el -
+;; use fwrite instead of write-table to allow for column values to be
+;; lists
+;; (setq org-babel-R-write-object-command "{
+;;     function(object,transfer.file) {
+;;         library(data.table)
+;;         object
+;;         invisible(
+;;             if (
+;;                 inherits(
+;;                     try(
+;;                         {
+;;                             tfile<-tempfile()
+;;                             fwrite(object, file=tfile, sep=\"\\t\",
+;;                                         na=\"NA\",row.names=%s,col.names=%s,
+;;                                         quote=\"auto\",
+;;                                         sep2=c(\"\",\";\",\"\")
+;;                                   )
+;;                             file.rename(tfile,transfer.file)
+;;                         },
+;;                         silent=TRUE),
+;;                     \"try-error\"))
+;;                 {
+;;                     if(!file.exists(transfer.file))
+;;                         file.create(transfer.file)
+;;                 }
+;;             )
+;;     }
+;; }(object=%s,transfer.file=\"%s\")")
+
+
+(progn
+  ;; following discussion in see:
+  ;; https://emacs.stackexchange.com/questions/614/creating-permalinks-for-sections-in-html-exported-from-org-mode/615
+  ;; : (a) redfine functions from org-id to work with "CUSTOM_ID"
+  ;; instead of "ID" (b) implement a new org-id-method 'heading which
+  ;; might create problems since the values it generates are not
+  ;; actually guaranteed to be unique and also are only minimally
+  ;; santitized for use as target in ULR but see
+  ;; [[https://emacs.stackexchange.com/questions/2186/have-org-modes-exported-html-use-custom-id-when-linking-to-sub-sections-in-toc][Have
+  ;; org-mode's exported HTML use CUSTOM_ID when linking to
+  ;; sub-sections in TOC]] for possible improvement / similar
+  ;; approach?
+  (defun org-id-get-create (&optional force)
+    "Create an ID for the current entry and return it.
+If the entry already has an ID, just return it.
+With optional argument FORCE, force the creation of a new ID."
+    (interactive "P")
+    (when force
+      (org-entry-put (point) "CUSTOM_ID" nil))
+    (org-id-get (point) 'create))
+
+  (defun org-id-get (&optional pom create prefix)
+    "Get the ID property of the entry at point-or-marker POM.
+If POM is nil, refer to the entry at point.
+If the entry does not have an ID, the function returns nil.
+However, when CREATE is non nil, create an ID if none is present already.
+PREFIX will be passed through to `org-id-new'.
+In any case, the ID of the entry is returned."
+    (org-with-point-at pom
+      (let ((id (org-entry-get nil "CUSTOM_ID")))
+	(cond
+	 ((and id (stringp id) (string-match "\\S-" id))
+	  id)
+	 (create
+	  (setq id (org-id-new prefix))
+	  (org-entry-put pom "CUSTOM_ID" id)
+	  (org-id-add-location id (buffer-file-name (buffer-base-buffer)))
+	  id)))))
+
+  (defun org-id-get (&optional pom create prefix)
+    "Get the ID property of the entry at point-or-marker POM.
+If POM is nil, refer to the entry at point.
+If the entry does not have an ID, the function returns nil.
+However, when CREATE is non nil, create an ID if none is present already.
+PREFIX will be passed through to `org-id-new'.
+In any case, the ID of the entry is returned."
+    (org-with-point-at pom
+      (let ((id (org-entry-get nil "CUSTOM_ID")))
+	(cond
+	 ((and id (stringp id) (string-match "\\S-" id))
+	  id)
+	 (create
+	  (setq id (org-id-new prefix))	
+	  (org-entry-put pom "CUSTOM_ID" id)
+	  (org-id-add-location id (buffer-file-name (buffer-base-buffer)))
+	  id)))))
+
+  (setq  org-id-method 'heading)
+  (defun org-id-new (&optional prefix)
+    "Create a new globally unique ID.
+
+An ID consists of two parts separated by a colon:
+- a prefix
+- a unique part that will be created according to `org-id-method'.
+
+PREFIX can specify the prefix, the default is given by the variable
+`org-id-prefix'.  However, if PREFIX is the symbol `none', don't use any
+prefix even if `org-id-prefix' specifies one.
+
+So a typical ID could look like \"Org:4nd91V40HI\"."
+    (let* ((prefix (if (eq prefix 'none)
+		       ""
+		     (concat (or prefix org-id-prefix) ":")))
+	   unique)
+      (if (equal prefix ":") (setq prefix ""))
+      (cond
+       ((memq org-id-method '(heading))
+	;;(setq unique (url-encode-url (replace-regexp-in-string " " "." (downcase (org-get-heading t t t t)))))
+	(setq unique (url-encode-urlustom-id
+		      org-id-method 'org))
+	;; Based on org-expiry-insinuate
+	))))
+  (add-hook 'org-insert-heading-hook 'org-id-get-create)
+  (add-hook 'org-after-todo-state-change-hook 'org-id-get-create)
+  (add-hook 'org-after-tags-change-hook 'org-id-get-create)
+  (defun my/org-update-ids ()
+    ;; kudos: https://emacs.stackexchange.com/questions/614/creating-permalinks-for-sections-in-html-exported-from-org-mode
+    (interactive)
+    (let* ((tree (org-element-parse-buffer 'headline))
+	   (map (org-element-map tree 'headline
+		  (lambda (hl)
+		    (org-element-property :begin hl)))))
+      (save-excursion
+	(cl-loop for point in map do
+		 (goto-char point)
+		 (org-id-get-create))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; ORG REF
+(use-package org-ref) ; used to fail! so: hand installed using package browser.
+;;(require 'org-ref)
+;; (require 'org-ref-wos)
+;; (require 'org-ref-scopus)
+;;(use-package org-ref-pubmed)
+
+(setq reftex-default-bibliography '("~/bibliography/references.bib"))
+
+;; see org-ref for use of these variables
+(setq org-ref-bibliography-notes "~/bibliography/notes.org"
+      org-ref-default-bibliography '("~/bibliography/references.bib")
+      org-ref-pdf-directory "~/bibliography/bibtex-pdfs/") 
+
+
+;(require 'org)
+
+(defun org-cycle-hide-drawers (state)
+  ;; kudos https://stackoverflow.com/questions/17478260/completely-hide-the-properties-drawer-in-org-mode
+  "Re-hide all drawers after a visibility state change."
+  (when (and (derived-mode-p 'org-mode)
+	     (not (memq state '(overview folded contents))))
+    (save-excursion
+      (let* ((globalp (memq state '(contents all)))
+	     (beg (if globalp
+		      (point-min)
+		    (point)))
+	     (end (if globalp
+		      (point-max)
+		    (if (eq state 'children)
+			(save-excursion
+			  (outline-next-heading)
+			  (point))
+		      (org-end-of-subtree t)))))
+	(goto-char beg)
+	(while (re-search-forward org-drawer-regexp end t)
+	  (save-excursion
+	    (beginning-of-line 1)
+	    (when (looking-at org-drawer-regexp)
+	      (let* ((start (1- (match-beginning 0)))
+		     (limit
+		      (save-excursion
+			(outline-next-heading)
+			(point)))
+		     (msg (format
+			   (concat
+			    "org-cycle-hide-drawers:  "
+			    "`:END:`"
+			    " line missing at position %s")
+			   (1+ start))))
+		(if (re-search-forward "^[ \t]*:END:" limit t)
+		    (outline-flag-region start (point-at-eol) t)
+		  (user-error msg))))))))))
+(use-package hide-mode-line)
+
+;;(use-package org-present)
+    ;;(add-to-list 'load-path "~/path/to/org-present")
+(autoload 'org-present "org-present" nil t)
+(setq org-present-mode-hook nil
+      org-present-mode-quit-hook nil)
+(eval-after-load "org-present"
+  '(progn
+     (add-hook ' org-present-mode-hook
+		 (lambda ()
+		   (org-cycle-hide-drawers 'all)
+		   (hide-mode-line-mode)
+		   (org-present-big)
+		   (org-display-inline-images)
+		   (org-present-hide-cursor)
+		   (org-present-read-only)))
+     (add-hook 'org-present-mode-quit-hook
+	       (lambda ()
+		 (hide-mode-line-mode)
+		 (org-present-small)
+		 (org-remove-inline-images)
+		 (org-present-show-cursor)
+		 (org-present-read-write)))))
+    
+
+;; overwrite definition from
+;; ~/.dotfiles/emacs/.emacs.d/elpa/org-plus-contrib-20181008/ob.R.el -
+;; use fwrite instead of write-table to allow for column values to be
+;; lists
+;; (setq org-babel-R-write-object-command "{
+;;     function(object,transfer.file) {
+;;         library(data.table)
+;;         object
+;;         invisible(
+;;             if (
+;;                 inherits(
+;;                     try(
+;;                         {
+;;                             tfile<-tempfile()
+;;                             fwrite(object, file=tfile, sep=\"\\t\",
+;;                                         na=\"NA\",row.names=%s,col.names=%s,
+;;                                         quote=\"auto\",
+;;                                         sep2=c(\"\",\";\",\"\")
+;;                                   )
+;;                             file.rename(tfile,transfer.file)
+;;                         },
+;;                         silent=TRUE),
+;;                     \"try-error\"))
+;;                 {
+;;                     if(!file.exists(transfer.file))
+;;                         file.create(transfer.file)
+;;                 }
+;;             )
+;;     }
+;; }(object=%s,transfer.file=\"%s\")")
+
+
+(progn
+  ;; following discussion in see:
+  ;; https://emacs.stackexchange.com/questions/614/creating-permalinks-for-sections-in-html-exported-from-org-mode/615
+  ;; : (a) redfine functions from org-id to work with "CUSTOM_ID"
+  ;; instead of "ID" (b) implement a new org-id-method 'heading which
+  ;; might create problems since the values it generates are not
+  ;; actually guaranteed to be unique and also are only minimally
+  ;; santitized for use as target in ULR but see
+  ;; [[https://emacs.stackexchange.com/questions/2186/have-org-modes-exported-html-use-custom-id-when-linking-to-sub-sections-in-toc][Have
+  ;; org-mode's exported HTML use CUSTOM_ID when linking to
+  ;; sub-sections in TOC]] for possible improvement / similar
+  ;; approach?
+  (defun org-id-get-create (&optional force)
+    "Create an ID for the current entry and return it.
+If the entry already has an ID, just return it.
+With optional argument FORCE, force the creation of a new ID."
+    (interactive "P")
+    (when force
+      (org-entry-put (point) "CUSTOM_ID" nil))
+    (org-id-get (point) 'create))
+
+  (defun org-id-get (&optional pom create prefix)
+    "Get the ID property of the entry at point-or-marker POM.
+If POM is nil, refer to the entry at point.
+If the entry does not have an ID, the function returns nil.
+However, when CREATE is non nil, create an ID if none is present already.
+PREFIX will be passed through to `org-id-new'.
+In any case, the ID of the entry is returned."
+    (org-with-point-at pom
+      (let ((id (org-entry-get nil "CUSTOM_ID")))
+	(cond
+	 ((and id (stringp id) (string-match "\\S-" id))
+	  id)
+	 (create
+	  (setq id (org-id-new prefix))
+	  (org-entry-put pom "CUSTOM_ID" id)
+	  (org-id-add-location id (buffer-file-name (buffer-base-buffer)))
+	  id)))))
+
+  (defun org-id-get (&optional pom create prefix)
+    "Get the ID property of the entry at point-or-marker POM.
+If POM is nil, refer to the entry at point.
+If the entry does not have an ID, the function returns nil.
+However, when CREATE is non nil, create an ID if none is present already.
+PREFIX will be passed through to `org-id-new'.
+In any case, the ID of the entry is returned."
+    (org-with-point-at pom
+      (let ((id (org-entry-get nil "CUSTOM_ID")))
+	(cond
+	 ((and id (stringp id) (string-match "\\S-" id))
+	  id)
+	 (create
+	  (setq id (org-id-new prefix))	
+	  (org-entry-put pom "CUSTOM_ID" id)
+	  (org-id-add-location id (buffer-file-name (buffer-base-buffer)))
+	  id)))))
+
+  (setq  org-id-method 'heading)
+  (defun org-id-new (&optional prefix)
+    "Create a new globally unique ID.
+
+An ID consists of two parts separated by a colon:
+- a prefix
+- a unique part that will be created according to `org-id-method'.
+
+PREFIX can specify the prefix, the default is given by the variable
+`org-id-prefix'.  However, if PREFIX is the symbol `none', don't use any
+prefix even if `org-id-prefix' specifies one.
+
+So a typical ID could look like \"Org:4nd91V40HI\"."
+    (let* ((prefix (if (eq prefix 'none)
+		       ""
+		     (concat (or prefix org-id-prefix) ":")))
+	   unique)
+      (if (equal prefix ":") (setq prefix ""))
+      (cond
+       ((memq org-id-method '(heading))
+	;;(setq unique (url-encode-url (replace-regexp-in-string " " "." (downcase (org-get-heading t t t t)))))
+	(setq unique (url-encode-url
+		      (replace-regexp-in-string "^\_+" ""
+						(replace-regexp-in-string "\_+$" ""
+									  (replace-regexp-in-string "[^a-z]+" "_" (downcase (org-get-heading t t t t)))))))
+	)
+       ((memq org-id-method '(uuidgen uuid))
+	(setq unique (org-trim (shell-command-to-string org-id-uuid-program)))
+	(unless (org-uuidgen-p unique)
+	  (setq unique (org-id-uuid))))
+       ((eq org-id-method 'org)
+	(let* ((etime (org-reverse-string (org-id-time-to-b36)))
+	       (postfix (if org-id-include-domain
+			    (progn
+			      (require 'message)
+			      (concat "@" (message-make-fqdn))))))
+	  (setq unique (concat etime postfix))))
+       (t (error "Invalid `org-id-method'")))
+      (concat prefix unique)))
+  )
+;;Rscript --vanilla -e 'library(rmarkdown); rmarkdown::render(commandArgs(trailingOnly=TRUE)[1])<'1w
+
+;;(add-to-list 'load-path "~/elisp/org-mode/contrib/lisp/")
+
+(defun org-table-import-xlsx-to-csv-org () 
+  (interactive)
+  (let* ((source-file  (file-name-sans-extension (buffer-file-name (current-buffer))))
+         (xlsx-file (concat source-file ".xlsx"))
+         (csv-file (concat source-file ".csv")))
+    (org-odt-convert xlsx-file "csv")
+    (org-table-import csv-file  nil)))
+
+
+(defun org-table-import-xlsx-file-to-csv-org (file) 
+  (interactive "f")
+  (let* ((source-file  (file-name-sans-extension (buffer-file-name (current-buffer))))
+         (xlsx-file (concat source-file ".xlsx"))
+         (csv-file (concat source-file ".csv")))
+    (org-odt-convert file "csv")
+    (org-table-import csv-file  nil)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Error (use-package): Cannot load matlab-mode
+;; (use-package matlab-mode ;; kudos https://github.com/abo-abo/matlab-mode
+;;   
+;;   :config (progn
+;; 	    (setq default-fill-column fill-column) ; without which some bug loading the mode
+;; 	    (setq matlab-indent-function t) ; if you want function bodies indented
+;; 	    (setq matlab-verify-on-save-flag nil) ; turn off auto-verify on save
+;; 	    ;;(defun my-matlab-mode-hook ()
+;; 	    ;;     (setq fill-column 76))		; where auto-fill should wrap
+;; 	    ;;   (add-hook 'matlab-mode-hook 'my-matlab-mode-hook)
+;; 	    ;;   (defun my-matlab-shell-mode-hook ()
+;; 	    ;;	'())
+;; 	    ;;   (add-hook 'matlab-shell-mode-hook 'my-matlab-shell-mode-hook)
+;; 	    ))
+
+(setq org-babel-default-header-args:matlab
+  '((:results . "output") (:session . "*MATLAB*")))
+
+;; list of babel languages
+(org-babel-do-load-languages
+ 'org-babel-load-languages
+ '((matlab . t)
+   (sql .t)
+   ))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; FILE ME BELOW
+
+(autoload 'comint-dynamic-complete-filename "comint" nil t)
+(global-set-key "\M-]" 'comint-dynamic-complete-filename)
+
+
 (setq load-prefer-newer t)	     ; don't load .elc if .el file is newer
+
+(setq write-region-inhibit-fsync t)	; I find that the stowers file
+					; system writes more slowly
+					; than my fingers move
+					; sometimes.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; PACKAGES - a few ways of cataloging and requiring them: package,
 ;;; use-package, auto-install, el-get:
 
-
-(require 'package)
-
-
-;;; Standard package repositories
-
-(when (< emacs-major-version 24)
-  ;; Mainly for ruby-mode
-  (add-to-list 'package-archives '("marmalade" . "http://marmalade-repo.org/packages/")))
-
-;; We include the org repository for completeness, but don't normally
-;; use it.
-(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
-
-(when (< emacs-major-version 24)
-  (add-to-list 'package-archives '("gnu" . "http://elpa.gnu.org/packages/")))
-
-;;; Also use Melpa for most packages
-(add-to-list 'package-archives `("melpa" . ,(if (< emacs-major-version 24)
-                                                "http://melpa.org/packages/"
-                                              "https://melpa.org/packages/")))
-
-
-
-;(add-to-list 'package-archives '("elpy" . "http://jorgenschaefer.github.io/packages/") t) ; for use by elpy
-(package-initialize)
-
-(use-package edit-server :ensure t
+(use-package edit-server
   ;; for editting fields in chrome
-  :init (edit-server-start))
+  :if window-system
+  :init
+  (add-hook 'after-init-hook 'server-start t)
+  (add-hook 'after-init-hook 'edit-server-start t)
+  ;;:config (edit-server-start)
+  )
 
-(use-package ess :ensure t
-  :config (progn (require 'ess-site)
-		 (setq ess-default-style 'DEFAULT)
-		 ))
+;;(use-package eval-in-repl) ;; TODO: works for shell?
 
-(require 'cl)
 
-(unless (require 'use-package nil t) ;; (fboundp 'use-package)
-  (package-install 'use-package)
-  (require 'use-package))
-  ;; (defmacro* use-package (p  &rest ignore &key init ensure)
-  ;;   `(and
-  ;;     (require ',p nil t)
-  ;;     ,init
-  ;;     ))
-
-(or (use-package toc-org :ensure t
-		 :config (progn
-			 (add-hook 'org-mode-hook 'toc-org-enable)))
-  (warn "org-toc not found"))
+;; (or (use-package toc-org
+;;       :config (progn
+;; 		(add-hook 'org-mode-hook 'toc-org-enable)))
+;;     (warn "org-toc not found"))
 
 
 (fset 'function-put 'put)
 
-;; (use-package paradox :ensure t
+;; (use-package paradox
 ;;   ;; a modern packages menu
-;;   :init (progn
+;;   :config (progn
 ;; 	  (setq paradox-github-token '4347ac649c32dcae5730afbaeaabcead8ed23076)
 ;; 	  ))
 
-(use-package smart-mode-line :ensure t)	; makes paradox cleaner
+(use-package smart-mode-line)	; makes paradox cleaner
 
-(use-package async :ensure t)		; allowing paradox to perform asynchronous package installation, inter alia
+(use-package async)		; allowing paradox to perform asynchronous package installation, inter alia
 
-(use-package auto-install :ensure t
-  :config (progn
-	  (setq auto-install-save-confirm nil) ; just do it!
-	  (auto-install-update-emacswiki-package-name t)
-	  ;; Make auto-installed packages findable: 
-	  (add-to-list 'load-path (expand-file-name auto-install-directory))
-	  ))
+;; (use-package auto-install
+;;   :config (progn
+;; 	  (setq auto-install-save-confirm nil) ; just do it!
+;; 	  (auto-install-update-emacswiki-package-name t)
+;; 	  ;; Make auto-installed packages findable: 
+;; 	  (add-to-list 'load-path (expand-file-name auto-install-directory))
+;; 	  ))
 
-;; (use-package el-get :ensure t
-;;   :init (progn
+;; (use-package el-get
+;;   :config (progn
 ;; 	      (el-get-emacswiki-refresh)
 ;; 	      ))
 
@@ -93,27 +1142,36 @@
 					; init, when it is set.
 			  (buffer-file-name) ; in case of eval from within edit buffer.
 			  )))
+(setq EmacsInitDir "/home/mec/.dotfiles/emacs/.emacs.d/")
+(dolist (default-directory (mapcar (lambda(d) (expand-file-name d EmacsInitDir)) 
+				   (list
+				    ;; "elisp" 
+				    ;; "elpa"
+				    "add-to-load-path"
+					 )))
+  ;; where else to find required libraries.  strategy cobbled from
+  ;; http://www.emacswiki.org/emacs/LoadPath -
+  (setq load-path
+        (append
+         (let ((load-path (copy-sequence load-path))) ;; Shadow -
+	   ;; ensuring that the loaded paths are IN FRONT OF system
+	   ;; paths
+           (append
+            (copy-sequence (normal-top-level-add-to-load-path '(".")))
+            (normal-top-level-add-subdirs-to-load-path)))
+         load-path)))
 
-;; (dolist (default-directory (mapcar (lambda(d) (expand-file-name d EmacsInitDir)) 
-;; 				   (list "elisp" 
-;; 					 "elpa"
-;; 					 )))
-;;   ;; where else to find required libraries.  strategy cobbled from
-;;   ;; http://www.emacswiki.org/emacs/LoadPath -
-;;   (setq load-path
-;;         (append
-;;          (let ((load-path (copy-sequence load-path))) ;; Shadow -
-;; 	   ;; ensuring that the loaded paths are IN FRONT OF system
-;; 	   ;; paths
-;;            (append
-;;             (copy-sequence (normal-top-level-add-to-load-path '(".")))
-;;             (normal-top-level-add-subdirs-to-load-path)))
-;;          load-path)))
+;; (let ((default-directory  "~/.emacs.d/add-to-load-path/"))
+;;   (normal-top-level-add-to-load-path '("."))
+;;   (normal-top-level-add-subdirs-to-load-path))
+
+;;(add-to-list 'load-path "~mec/elisp/org-mode/contrib/lisp/")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                          ELISP DEVELOPMENT
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(use-package auto-compile :ensure t
+(use-package auto-compile
   :config (progn
 	  (setq load-prefer-newer t)	     ; don't load .elc if .el file is newer
 	  (auto-compile-on-save-mode)	     ; compile .el files when they are being saved.
@@ -121,12 +1179,12 @@
 
 
 (use-package shell
-  :init (progn
+  :config (progn
 	  (setq explicit-shell-file-name "/bin/bash")
 	  ))
-;;(use-package epresent :ensure t) ;; an Emacs minor mode for giving presentations. breaks with emacs 24
-(use-package tramp :ensure t
-  :init (progn
+;;(use-package epresent) ;; an Emacs minor mode for giving presentations. breaks with emacs 24
+(use-package tramp
+  :config (progn
 	  (setq
 	   tramp-default-method "ssh"
 	   ;; allowing these to work too:
@@ -134,14 +1192,16 @@
 	   ;;/mec@:~/
 	   tramp-default-user "mec"
 	   ;;tramp-default-host "access.stowers.org"
-	   tramp-default-host "beta"
+	   tramp-default-host "mango"
 	   )
 	  ;;/ssh:mec@access.stowers.org:~/
+	  ;;/ssh:mec@bioinfo.sgc.loc:~/
 	  ;;/mec@access.stowers.org:~/
 	  ;;
 	  ;;not working - multihop syntax:
 	  ;;/mec@access.stowers.org|mec@maple|mec@catalpa:~/
 
+	  ;; /ssh:mec@mango:/n/core/Genomics/Analysis/Si/younshim_park/yop2/mec/yop2.mec.org
 	  ;; works: c-x c-f 
 	  ;; /ssh:mec@access.stowers.org|ssh:mec@maple|ssh:mec@catalpa:~/
 	  ;; but not with ffap
@@ -162,7 +1222,7 @@
 		)
 	  ))
 
-;;(require 'ipython)
+;;(use-package ipython)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                        HOST SPECIFIC
@@ -171,44 +1231,40 @@
                                ;;data is sent for printing.
 (setq lpr-switches '("-PB020502"))
 
-(use-package printing
-  :config (progn
-	  (pr-update-menus t); make sure we use localhost as cups server
-	  (setenv "CUPS_SERVER" "localhost")
-	  ;;(package-require 'cups)			; from marmlade
-	  ))
+;; (use-package printing
+;;   :config (progn
+;; 	  (pr-update-menus t); make sure we use localhost as cups server
+;; 	  (setenv "CUPS_SERVER" "localhost")
+;; 	  ;;(package-require 'cups)			; from marmlade
+;; 	  ))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                             LOOK & FEEL
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(use-package zenburn-theme :ensure t)
+(use-package zenburn-theme )
+;;(zenburn-theme)
+;;(use-package solarized-theme)
+;; (use-package color-theme)
+;; (color-theme-initialize)
+;; (color-theme-resolve)
+;;(use-package tango-plus-theme)
+;;(use-package solarized-theme)
+;;(solarized-theme)
+(use-package org-beautify-theme)	; not sure I like this yet - 
 
-(global-font-lock-mode 1)         ; make pretty color fonts default
+(global-font-lock-mode t)         ; make pretty color fonts default
 
-;; (use-package hc-zenburn-theme :ensure t
-;;   :init (progn))
+;; (use-package hc-zenburn-theme   :config (progn)) ;; scimax c
 
 (define-key global-map [f2] 'accelerate-menu)
-(define-key global-map [menux] 'accelerate-menu)
-(define-key global-map [menu] 'accelerate-menu)
+;; (define-key global-map [menux] 'accelerate-menu)
+;; (define-key global-map [menu] 'accelerate-menu)
 
 (use-package recentf
   ;;  keep track of recently opened files in the file open menu
-  :init (recentf-mode 1))
+  :config (recentf-mode 1))
 
-;;; Removes gui elements ;;;;
-(if (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))  ; no gui scrollbars
-;;(menu-bar-no-scroll-bar)
-(if (fboundp 'tool-bar-mode) (tool-bar-mode -1))      ; no toolbar!
-;;(if (fboundp 'menu-bar-mode) (menu-bar-mode 0))     ; no menubar - use f10 and tmm
-;;;  SELECTION / CLIPBOARD / THE MOUSE & X -  c.f. http://www.emacswiki.org/emacs/CopyAndPaste
-(setq select-enable-primary t);  - default nil; set this to t if you want the Emacs commands C-w and C-y to use the primary selection.
-(setq select-enable-clipboard t);- default t; set this to nil if you want the Emacs commands C-w and C-y to use the clipboard selection.
-(setq interprogram-paste-function 'x-cut-buffer-or-selection-value)
-(use-package mouse-copy)
-(global-set-key [C-down-mouse-1] 'mouse-drag-secondary-pasting)
-(global-set-key [C-S-down-mouse-1] 'mouse-drag-secondary-moving)
 
 ;;; WINDOW NAVIGATION
 (setq split-height-threshold 0)
@@ -219,9 +1275,6 @@
 
 (setq scroll-conservatively 10)
 
-(unless window-system
-  (xterm-mouse-mode t)
-  )
 
 (setq frame-title-format
       (list (user-login-name) "@"  (shell-command-to-string "hostname -s")  "| %S@%S: %b"))
@@ -241,19 +1294,29 @@
 ;; (setq mail-user-agent 'message-user-agent)
 ;; (setq message-send-mail-function 'message-smtpmail-send-it)
 
+;;;                    NEWS READING
+(setq gnus-select-method
+	     '(nntp "news.gmane.org"
+		     (nntp-open-connection-function nntp-open-tls-stream)
+		     (nntp-port-number 563)
+		     (nnir-search-engine gmane)
+		     ))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; MISC SETTINGS
 (setq garbage-collection-messages t)    ; tell me when GC is happening
+(setq gc-cons-threshold (* 8192 8192)) ; c.f. https://lists.gnu.org/archive/html/emacs-devel/2002-07/msg00814.html
 
-(transient-mark-mode 1)  ;; always highlight region between point and mark
-                         ;; (when active)
+;; (transient-mark-mode 1)  ;; always highlight region between point and mark
+;;                          ;; (when active)
 
 ;; Show column and row number in mode line
-(column-number-mode t)
-(line-number-mode t)
+(column-number-mode nil)
+(line-number-mode nil);; t maybe interacts with org and/or font-lock?
 
 ;; When point is on paranthesis, highlight the matching one
-(show-paren-mode t)
+(show-paren-mode nil)
 (which-function-mode t)
 
 (setq indicate-empty-lines t) ;; Indicate empty lines at the end of buffer
@@ -261,7 +1324,7 @@
 (setq-default show-trailing-whitespace t) ;; Show trailing whitespace (usually a mistake)
 
 (use-package ffap
-  :init (progn
+  :config (progn
 	  (ffap-bindings)
 	  ;;(setq ffap-machine-p-known 'accept)
 	  ))
@@ -270,7 +1333,10 @@
 ;;;                  MISC KEYMAP BINDINGS
 (define-key global-map [(f6)] 'prefix-region)
 (define-key global-map [(meta space)] 'fixup-whitespace) ;;overriding just-one-space
-(define-key global-map [(control x) (meta y)] 'bury-buffer)
+(define-key global-map [(control x) (meta y)] 'bury-buffer
+  ;; NOTE: polymode's non-standard use of buffers makes this less
+  ;; usefull in polymode buffers - presumably now fixed?
+  ) 
 (define-key global-map [(control x) (control F)] 'find-file-at-point)
 (define-key global-map [(meta p)] 'fill-paragraph)
 (define-key global-map [M-S-mouse-3] 'imenu)
@@ -283,174 +1349,52 @@
 (define-key global-map [(control x) p] 'previous-multiframe-window)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;                  LITERATE PROGRAMMING AND DOCUMENTS
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun rmarkdown-render ()
-  "run rmarkdown::render() on the current file and display results in buffer *Shell Command Output*"
-  (interactive)
-  (let ((render-command (read-string "render command:" 
-				     (format "render('%s',%s);"
-					     (shell-quote-argument (buffer-file-name))
-					     "'all'"
-					     ))))
-    (shell-command
-     (message
-      "Rscript -e \"withCallingHandlers({library(rmarkdown); %s}, error = function(e) {print(sys.calls())})\"" ;;print(sessionInfo())
-      render-command
-      )
-     "*rmarkdown::render standard output*"
-     ;;"*rmarkdown::render error output*"
-     )
-    ))
+(when nil
+  ;; trying to figure out how to get tables cross referenced
+  (defun org-html-list-of-tables (info)
+    "Build a list of tables.
+INFO is a plist used as a communication channel.  Return the list
+of tables as a string, or nil if it is empty."
+    (let ((lol-entries (org-export-collect-tables info)))
+      ;;"asdfasdf")
+      ;;(list (length lol-entries))))
 
-(use-package markdown-mode :ensure t
-  ;;"Major mode for editing Markdown files"
-;;; c.f. http://jblevins.org/projects/markdown-mode/
-  :config (progn
-	  ;; (add-to-list 'auto-mode-alist '("\\.text\\'" . markdown-mode))
-	  ;; (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-mode))
-	  ;; (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-mode))
-	  ;; (add-to-list 'auto-mode-alist '("\\.Rmd\\'" . markdown-mode))
-	  ;;(define-key markdown-mode-map [(control c) (control c) (r)] 'rmarkdown-render)
-	  ;;(define-key polymode-mode-map [(meta n) (r)] 'rmarkdown-render)
-	  (define-key markdown-mode-map  (kbd "C-c C-c r") 'rmarkdown-render)
-	  ;;(define-key markdown-mode-map (kbd "C-c C-c r") 'rmarkdown-render)
-	  ;;(define-key map "\C-c\C-al" 'markdown-insert-link)
-	  ;;(setq markdown-css-path
-	  ;;(setq markdown-mode-hook nil)
-	  (add-hook 'markdown-mode-hook 'pandoc-mode)
-	  (add-hook 'markdown-mode-hook 'turn-on-orgtbl)
-	  ;;(add-hook 'markdown-mode-hook 'orgtbl-mode)
-	  ;;(add-hook 'markdown-mode-hook 'orgstruct-mode)
-	  ;;(add-hook 'markdown-mode-hook 'orgstruct++-mode)
-	  ))
-
-;; *.Rmd files invoke r-mode                    ; Temporary fix for R markdown files
-;(add-to-list 'auto-mode-alist '("\\.Rmd$" . r-mode))
-; commented while trying out:
-
-;; (use-package polymode :ensure t
-;;   :config (progn
-;; 	  (use-package poly-R)
-;; 	  (use-package poly-markdown)
-;; 	  (use-package poly-noweb)
-;; 	  ;;(use-package poly-org)
-;; 	  (define-key polymode-mode-map [(meta n) (r)] 'rmarkdown-render)
-;; 	  ;;(define-key polymode-mode-map [(r)] 'self-insert-command)
-	  
-;; 	  (if nil (use-package polymode-configuration)
-;; 	    ;; else, choose suits your needs and place into your .emacs file.
-;; ;;; MARKDOWN
-;; 	    ;;  (add-to-list 'auto-mode-alist '("\\.md" . poly-markdown-mode))
-;; ;;; ORG
-;; ;;;    (add-to-list 'auto-mode-alist '("\\.org" . poly-org-mode))
-;; ;;; R related modes
-;; 	    (add-to-list 'auto-mode-alist '("\\.Snw" . poly-noweb+r-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.Rnw" . poly-noweb+r-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.Rmd" . poly-markdown+r-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.rapport" . poly-rapport-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.Rhtml" . poly-html+r-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.Rbrew" . poly-brew+r-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.Rcpp" . poly-r+c++-mode))
-;; 	    (add-to-list 'auto-mode-alist '("\\.cppR" . poly-c++r-mode))
-;; 	    (provide 'polymode-configuration))
-;; 	  ))
-
-;; (use-package pander-mode :ensure t
-;;   :config (progn
-;; 	  (add-hook 'markdown-mode-hook 'pander-mode)
-;; 	  (add-hook 'pandoc-mode-hook
-;; 		    ;; checks if a default settings file exists for the file
-;; 		    ;; being loaded and reads its settings if it finds one.
-;; 		    'pandoc-load-default-settings)
-;; 	  ))
-
-(use-package polymode
-  ;; can work with both .Rmd and .org files
-  :ensure t
-  :config (use-package poly-org
-		 ;; flaky? experimental? switch between modes
-		 ;; within .org file
-		 ))
-
-(use-package org :ensure t
-  :config (progn
-	    (use-package org-pdfview)
-	    (use-package ob-ruby)
-	    ;; ctrl+space does not work in emacs?
-	    ;; should get fixed.  For now:
-	    ;; > ibus exit
-	    ;; or > apt-get uninstall ibux-???
-	    ;; or xmodkeymap something
-	    ;; c.f. https://bugs.launchpad.net/ubuntu/+source/ibus/+bug/1278569
-	    ;;(use-package org-compat)
-	    (use-package ob-sh)
-	    ;;(use-package ob-lua)
-	    (use-package ob-sql)
-	    ;;(use-package ob-R)
-	    (use-package ob-python)
-	    ;; (use-package ob-dot)
-	    ;; (use-package ob-screen)
-	    (use-package ob-perl)
-	    ;;(use-package ox-md)
-	    (setq  org-confirm-babel-evaluate nil ;don't require confirmation to
-;;;eval code.
-		   org-babel-no-eval-on-ctrl-c-ctrl-c t ; But C-c C-v e will still
-					; do it (just don't make
-					; it soooo easy)
-		   org-use-speed-commands t
-		   org-src-preserve-indentation t ; The nil default is especially irksome in ESS.
-		   )
-	    (setq org-return-follows-link t)
-	    (setq org-tab-follows-link t)
-	    (setq org-html-postamble nil ; 'auto
-		  org-latex-postamble nil)
-
-	    (setq org-link-abbrev-alist
-		  '(("bugzilla" . "http://10.1.2.9/bugzilla/show_bug.cgi?id=")
-		    ("google"    . "http://www.google.com/search?q=") ;; [[google:OrgMode]]
- 
-		    ("ads"    . "http://adsabs.harvard.edu/cgi-bin/nph-abs_connect?author=%s&db_key=AST")
-		    ))
-;;;;;  
-	    (setq  org-confirm-babel-evaluate nil ;don't require confirmation to
-;;;eval code.
-		   org-babel-no-eval-on-ctrl-c-ctrl-c t ; But C-c C-v e will still
-					; do it (just don't make
-					; it soooo easy)
-		   org-use-speed-commands t
-		   org-src-preserve-indentation t ; The nil default is especially irksome in ESS.
-		   )
-	    (setq org-return-follows-link t)
-	    (setq org-tab-follows-link t)
-	    (setq org-log-done 'note) ;; time stamp TODOs when done and prompt for closing 'note'
-
-	    (setq org-todo-keywords
-		  '((sequence "TODO(t)" "WAIT(w@/!)" "ONIT" "|" "DONE(d!)" "CANCELED(c@)" )))
-	    (define-key org-mode-map "\C-c2" 'org-babel-demarcate-block)
-
-	    (add-hook 'org-mode-hook #'flyspell-mode)
-	    ;; (use-package ox-reveal :ensure t
-	    ;;  error in emacs 24!?!?
-	    ;;   ;; export org into nice html presentation's 
-	    ;;   :config (progn
-	    ;; 		(setq org-reveal-root "http://cdn.jsdelivr.net/reveal.js/2.5.0/")
-	    ;; 		))
-	    (use-package org-tree-slide :ensure t ; NB -
-	      :config (progn 
-			(global-set-key (kbd "<f8>") 'org-tree-slide-mode)
-			(global-set-key (kbd "S-<f8>") 'org-tree-slide-skip-done-toggle)
-			(define-key org-tree-slide-mode-map  "left" 'org-tree-slide-move-previous-tree)
-			(define-key org-tree-slide-mode-map  "right" 'org-tree-slide-move-next-tree)
-			(org-tree-slide-presentation-profile)
-;;(etq org-tree-slide-slide-in-effect
-			;;(org-tree-slide-simple-profile)
-;; 			;;(org-tree-slide-narrowing-control-profile)
-
-			))
-
-	    ))
+      (when lol-entries
+	(concat "<div id=\"list-of-tables\">\n"
+		(let ((top-level (plist-get info :html-toplevel-hlevel)))
+		  (format "<h%d>%s</h%d>\n"
+			  top-level
+			  (org-html--translate "List of Tables" info)
+			  top-level))
+		"<div id=\"text-list-of-tables\">\n<ul>\n"
+		(let ((count 0)
+		      (initial-fmt (format "<span class=\"table-number\">%s</span>"
+					   (org-html--translate "Table %d:" info))))
+		  (mapconcat
+		   (lambda (entry)
+		     (let ((label (and
+				   ;;(org-element-property :name entry)
+				   ;; (or (org-element-property :name entry)
+				   ;;     (org-element-property :results entry))
+				       (org-export-get-reference entry info)))
+			   (title (org-trim
+				   (org-export-data
+				    (or (org-export-get-caption entry t)
+					(org-export-get-caption entry))
+				    info))))
+		       (concat
+			"<li>"
+			(if (not label)
+			    (concat (format initial-fmt (incf count)) " " title)
+			  (format "<a href=\"#%s\">%s %s</a>"
+				  label
+				  (format initial-fmt (incf count))
+				  title))
+			"</li>")))
+		   lol-entries "\n"))
+		"\n</ul>\n</div>\n</div>"))))
+  )
 
 
 ;#https://github.com/kawabata/ox-pandoc
@@ -462,31 +1406,33 @@
 (setq org-pandoc-options-for-beamer-pdf '((latex-engine . "xelatex")))
 (setq org-pandoc-options-for-latex-pdf '((latex-engine . "xelatex")))
 
-(when nil
-  (requireInst 'org-table-comment nil 
-	       ;;(auto-install-from-url "http://www.emacswiki.org/emacs/download/org-table-comment.el")
-	       (auto-install-from-emacswiki "org-table-comment.el")
-	       )
-					;(use-package org-table-comment :ensure t "http://www.emacswiki.org/emacs/download/org-table-comment.el")
-					;(auto-install-from-emacswiki "org-table-comment.el")
-					;(paradox-require 'org-table-comment)
-  (org-table-comment-mode)
-  ;;(turn-on-orgtbl)
-  ;; I like this but there are clashes - i.e. orgtbl ctrl-c ctrl-c
-  ;; shadows markdown utility commands which I miss , esp those for
-  ;; promotion and demotion out headers
+;; (when nil
+;;   (requireInst 'org-table-comment nil 
+;; 	       ;;(auto-install-from-url "http://www.emacswiki.org/emacs/download/org-table-comment.el")
+;; 	       (auto-install-from-emacswiki "org-table-comment.el")
+;; 	       )
+;; 					;(use-package org-table-comment "http://www.emacswiki.org/emacs/download/org-table-comment.el")
+;; 					;(auto-install-from-emacswiki "org-table-comment.el")
+;; 					;(paradox-require 'org-table-comment)
+;;   (org-table-comment-mode)
+;;   ;;(turn-on-orgtbl)
+;;   ;; I like this but there are clashes - i.e. orgtbl ctrl-c ctrl-c
+;;   ;; shadows markdown utility commands which I miss , esp those for
+;;   ;; promotion and demotion out headers
 
-  )
+;;   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                      SOFTWARE ENGINEERING
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(use-package gist :ensure t)
+(use-package gist)
 
-(use-package magit :ensure t)		; improved git interaction over 
+(use-package magit )		; improved git interaction over
+;; failing due to interaction with transient
+;; not using this yet - problems with older git at SIMR
 
-;; (use-package yasnippet :ensure t
+;; (use-package yasnippet
 ;;   ;; COMPLETION: yasnippet should be loaded before auto complete so
 ;;   ;; that they can work together
 ;;   :config (progn
@@ -494,19 +1440,21 @@
 ;; seems to cause bug on opening any file!
 ;; 	      ))
 
-(use-package auto-complete
-  :config (progn
-	    (use-package auto-complete-config)
-	    (add-to-list 'ac-dictionary-directories "~/.emacs.d/ac-dict")
-	    (ac-config-default)
-	    ;; set the trigger key so that it can work together with yasnippet on tab key,
-	    ;; if the word exists in yasnippet, pressing tab will cause yasnippet to
-	    ;; activate, otherwise, auto-complete will
-	    (ac-set-trigger-key "TAB")
-	    (ac-set-trigger-key "<tab>")
-	    ))
+;; (use-package auto-complete
+;;   :config (progn
+;; ;;	    (use-package auto-complete-config)
+;; 	    (add-to-list 'ac-dictionary-directories "~/.emacs.d/ac-dict")
+;; 	    (ac-config-default)
+;; 	    ;; set the trigger key so that it can work together with yasnippet on tab key,
+;; 	    ;; if the word exists in yasnippet, pressing tab will cause yasnippet to
+;; 	    ;; activate, otherwise, auto-complete will
+;; 	    (ac-set-trigger-key "TAB")
+;; 	    (ac-set-trigger-key "<tab>")
+;; 	    (setq  ac-use-quick-help nil) ;; else: error running timer ac-quick-help args-out-of-range https://github.com/auto-complete/auto-complete/issues/419
+;; 	    ))
+;;(auto-complete-mode -1) ;; it is timing out and taking too long.... just disable for now
 
-(use-package calendar
+(use-package calendar 
   ;; http://www.emacswiki.org/emacs/InsertingTodaysDate
   :config (progn
 	    (calendar-set-date-style 'iso) ;i.e. 2011-04-22
@@ -526,26 +1474,95 @@
 	      'insdate-insert-current-date)
 	    ))
 
-(setq eldoc-idle-delay  0.0)
+;;(setq eldoc-idle-delay  0.0)
 
+(org-babel-do-load-languages
+ 'org-babel-load-languages (quote ((emacs-lisp . t)
+                                    (sqlite . t)
+                                    (R . t)
+                                    (python . t))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                 LANGUAGE MODES
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(use-package inf-ruby :ensure t)
+(use-package inf-ruby)
+
 (use-package ruby-mode
-  :mode "\\.rb\\'"
-  :interpreter "ruby"
-  :ensure t
-  )
+  ;; :interpreter "ruby" ?? irb
+  :config  (progn
+	     ;; kudos https://github.com/jcf/previous-emacs.d/blob/master/ruby-custom.el
+	     (use-package rbenv
+	       :config
+	       (progn
+		 (setq
+		  rbenv-modeline-function 'rbenv--modeline-plain
+		  rbenv-show-active-ruby-in-modeline nil)
+		 (global-rbenv-mode)))
 
-(use-package enh-ruby-mode :ensure t
-  :config (progn
-	    (add-hook 'enh-ruby-mode-hook 'robe-mode)
-	    (add-hook 'enh-ruby-mode-hook 'yard-mode)
-	    ))
+	     (use-package ruby-tools)
 
-(use-package cperl-mode
+	     ;; (use-package rhtml-mode
+	     ;;   :mode (("\\.rhtml$" . rhtml-mode)
+	     ;;          ("\\.html\\.erb$" . rhtml-mode)))
+
+	     ;; (use-package rinari
+	     ;;   :config (global-rinari-mode 1)
+	     ;;   :config (setq ruby-insert-encoding-magic-comment nil))
+
+	     ;; (use-package rspec-mode
+	     ;;   :config
+	     ;;   (progn
+	     ;;     (setq rspec-use-rake-flag nil)
+	     ;;     (defadvice rspec-compile (around rspec-compile-around activate)
+	     ;;       "Use BASH shell for running the specs because of ZSH issues."
+	     ;;       (let ((shell-file-name "/bin/bash"))
+	     ;;         ad-do-it))))
+
+	     (use-package robe
+	       :config
+	       (add-hook 'robe-mode-hook 'ac-robe-setup))
+
+	     (use-package yard-mode)
+	     (use-package rspec-mode)
+	     (use-package enh-ruby-mode
+	       :config
+	       (progn
+		 (add-hook 'ruby-mode-hook 'rbenv-use-corresponding)
+		 (add-hook 'ruby-mode-hook 'rspec-mode)
+		 (add-hook 'enh-ruby-mode-hook 'robe-mode)
+		 (add-hook 'enh-ruby-mode-hook 'yard-mode)
+		 )))
+
+  ;;:config
+  ;; (progn
+  ;;   (setenv "JRUBY_OPTS" "--2.0")
+  ;;   (add-hook 'ruby-mode-hook 'robe-mode)
+  ;;   (add-hook 'ruby-mode-hook 'yard-mode)
+  ;;   (add-hook 'ruby-mode-hook 'rspec-mode)
+  ;;   (add-hook 'ruby-mode-hook 'rbenv-use-corresponding)
+
+  ;;   (setq ruby-deep-indent-paren nil))
+  :bind (("C-M-h" . backward-kill-word))
+  :mode (("\\.rake$" . ruby-mode)
+         ("\\.gemspec$" . ruby-mode)
+         ("\\.ru$" . ruby-mode)
+         ("\\.rb$" . ruby-mode)
+         ("[rR]akefile$" . ruby-mode)
+         ("Thorfile$" . ruby-mode)
+         ("Gemfile$" . ruby-mode)
+         ("Capfile$" . ruby-mode)
+         ("Guardfile$" . ruby-mode)))
+
+
+  ;; (add-to-list ' auto-mode-alist
+  ;;              '("\\.\\(?:cap\\|gemspec\\|irbrc\\|gemrc\\|rake\\|rb\\|ru\\|thor\\)\\'" . ruby-mode))
+  ;; (add-to-list 'auto-mode-alist
+  ;;              '("\\(?:Brewfile\\|Capfile\\|Gemfile\\(?:\\.[a-zA-Z0-9._-]+\\)?\\|[rR]akefile\\)\\'" . ruby-mode))
+
+
+(use-package man)
+
+(use-package cperl-mode 
   :config (progn
 	    ;; Tell Emacs that CPerlMode should be used instead of
 	    ;; PerlMode. Whenever perl-mode would normally be used cperl-mode is
@@ -570,7 +1587,6 @@
 			       (error "No perldoc args given")
 			     default-entry)
 			 input))))
-	      (use-package man)
 	      (let* ((is-func (and
 			       (string-match "^[a-z]+$" word)
 			       (string-match (concat "^" word "\\>")
@@ -688,7 +1704,6 @@
 		    'my-cperl-eldoc-documentation-function)))
 	    ))
 
-
 (defmacro mark-active ()
   "Xemacs/emacs compatibility macro"
   ;;From Perl Hacks: #7
@@ -715,12 +1730,13 @@
   (shell-command (concat "prove -v " (shell-quote-argument (buffer-file-name)))))
 
 
+(use-package dabbrev)
 (defadvice cperl-indent-command
     (around cperl-indent-command)
   ;;From Perl Hacks: #5 Autocomplete Perl Identifiers - however cperl-indent-or-complete
   "Changes \\[cpers-indent-command] so it autocompletes when at the end of a word."
   (if (looking-at "\\>") (dabbrev-expand nil) ad-do-it)
-  (eval-after-load "cperl-mode" '(progn (use-package dabbrev) (ad-activate 'cperl-indent-command))))
+  (eval-after-load "cperl-mode" '(progn  (ad-activate 'cperl-indent-command))))
 
 
 (defun perl-eval (beg end)
@@ -737,9 +1753,54 @@
 ;;;(use-package PerlySense) ;from my local xemacs/lisp - c.r. http://search.cpan.org/~johanl/Devel-PerlySense-0.0147/lib/Devel/PerlySense.pm
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;                     SQL MODE CONFIGURATION
+(defun sh-send-line-or-region (&optional step)
+  (interactive ())
+  (let ((proc (get-process "shell"))
+        pbuf min max command)
+    (unless proc
+      (let ((currbuff (current-buffer)))
+        (shell)
+        (switch-to-buffer currbuff)
+        (setq proc (get-process "shell"))
+        ))
+    (setq pbuff (process-buffer proc))
+    (if (use-region-p)
+        (setq min (region-beginning)
+              max (region-end))
+      (setq min (point-at-bol)
+            max (point-at-eol)))
+    (setq command (concat (buffer-substring min max) "\n"))
+    (with-current-buffer pbuff
+      (goto-char (process-mark proc))
+      (insert command)
+      (move-marker (process-mark proc) (point))
+      ) ;;pop-to-buffer does not work with save-current-buffer -- bug?
+    (process-send-string  proc command)
+    (display-buffer (process-buffer proc) t)
+    (when step 
+      (goto-char max)
+      (next-line))
+    ))
 
-(use-package sql
+(defun sh-send-line-or-region-and-step ()
+  (interactive)
+  (sh-send-line-or-region t))
+(defun sh-switch-to-process-buffer ()
+  (interactive)
+  (pop-to-buffer (process-buffer (get-process "shell")) t))
+
+
+(use-package sh-script 
+  :config (progn
+	    ;;key-bindings taken from ESS-mode for consistency
+ 	    (define-key sh-mode-map [(control return)] 'sh-send-line-or-region-and-step)
+ 	    (define-key sh-mode-map [(control c) (control z)] 'sh-switch-to-process-buffer)
+ 	    ))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                     SQL MODE CONFIGURATION
+					;#(use-package sqlind)
+;;(sqlind-minor-mode)
+(use-package sql 
   :config (progn
 	    (add-to-list 'auto-mode-alist  '("\\.\\(sql\\)" . sql-mode))
 	    (setq  sql-mysql-program "mysql"
@@ -760,7 +1821,7 @@
 
 		   )
 
-	    (setq	   sql-user ""	;what is default
+	    (setq	   sql-user ""	   ;what is default
 			   sql-password "" ;relying upon ~/.my.cnf
 			   sql-database "" ;fair default
 			   sql-server ""   ;could be localhost
@@ -792,17 +1853,22 @@
 	    (defun do-sql-postgres ()
 	      (interactive)		; "D")
 	      (setq   sql-user "flybase"            
-		      sql-password ""	     ;relying upon ~/.my.cnf
-		      sql-database "flybase" ;blastgres? mec?
+		      sql-password ""	       ;relying upon ~/.my.cnf
+		      sql-database "flybase"   ;blastgres? mec?
 		      sql-server "flybase.org" ;postgresql-dev
 		      )
 
 	      (setq   sql-user "astoria"            
-		      sql-password "" ;relying upon ~/.my.cnf
+		      sql-password ""	     ;relying upon ~/.my.cnf
 		      sql-database "astoria" ;blastgres? mec?
 		      sql-server "postgresqlkc01" ;       ;postgresql-dev
 		      )
 
+	      (setq   sql-user "mec"            
+		      sql-password ""	       ;relying upon ~/.my.cnf
+		      sql-database "simr_geneious"   ;blastgres? mec?
+		      sql-server "postgresqlkc01" ;postgresql-dev
+		      )
 	      (sql-postgres)
 	      ;;  (rename-buffer "flybase@flybase.org")
 	      )
@@ -919,19 +1985,63 @@
 
 	    ))
 
-(use-package n3-mode :ensure t)
+;(use-package n3-mode)
 ;(load-library "n3-mode") ;; it does not provide itself!?!
 
-(use-package yaml-mode :ensure t
+(use-package yaml-mode
   :config (add-to-list 'auto-mode-alist '("\\.yml$" . yaml-mode))
   )
 
-(use-package lua-mode
+(use-package lua-mode  
 ;(autoload 'lua-mode "lua-mode" "Lua editing mode." t)
   :config (progn
 	  (add-to-list 'auto-mode-alist '("\\.lua$" . lua-mode))
 	  (add-to-list 'interpreter-mode-alist '("lua" . lua-mode))
 	  ))
+
+(use-package js2-mode  
+;(autoload 'js2-mode "js2-mode" "Js2 editing mode." t)
+  :config (progn
+	  (add-to-list 'auto-mode-alist '("\\.js$" . js2-mode))
+	  (add-to-list 'interpreter-mode-alist '("js" . js2-mode))
+	  (add-to-list 'interpreter-mode-alist '("node" . js2-mode))
+	  ))
+
+(use-package nodejs-repl
+  ;;## kudos https://github.com/abicky/nodejs-repl.el
+  :config (progn
+	    (add-hook 'js-mode-hook
+		      (lambda ()
+			(define-key js-mode-map (kbd "C-x C-e") 'nodejs-repl-send-last-sexp)
+			(define-key js-mode-map (kbd "C-c C-r") 'nodejs-repl-send-region)
+			(define-key js-mode-map (kbd "C-c C-l") 'nodejs-repl-load-file)
+	                (define-key js-mode-map (kbd "C-c C-z") 'nodejs-repl-switch-to-repl)))
+	    ))
+
+
+
+;; /ssh:user@host|sudo::/path/to/file.
+
+;; (defun sudo-find-file (file-name)
+;;   "Like find file, but opens the file as root."
+;;   (interactive "FSudo Find File: ")
+;;   (let ((tramp-file-name (concat "/sudo:" (expand-file-name file-name))))
+;;     (find-file tramp-file-name)))
+
+
+;; (add-hook 'dired-mode-hook
+;;     (lambda ()
+;;       ;; open current file as sudo 
+;;       (local-set-key
+;;        ;;(kbd "C-x <M-S-return>")
+;;        (kbd "C-<return>")
+;;        (lambda()
+;;         (interactive)
+;;         (message "!!! SUDO opening %s" (dired-file-name-at-point))
+;;         (sudo-find-file (dired-file-name-at-point))
+;;       ))
+;;     )
+;;     )
 
 (defun sudo-edit-current-file ()
   (interactive)
@@ -947,8 +2057,9 @@
 	   (format "ssh:%s@%s|"
 		   (tramp-file-name-user vec)
 		   (tramp-file-name-host vec))))
-      (concat "/sudo:root@localhost:" tempfile)))  (let ((my-file-name) ; fill this with the file to open
-      (position))	   ; if the file is already open save position
+      (concat "/sudo:root@localhost:" tempfile)))
+  (let ((my-file-name)	   ; fill this with the file to open
+	(position))	   ; if the file is already open save position
     (if (equal major-mode 'dired-mode) ; test if we are in dired-mode 
         (progn
           (setq my-file-name (dired-get-file-for-visit))
@@ -959,19 +2070,26 @@
       (goto-char position))))
 
 (define-key dired-mode-map [(shift return)] 'sudo-edit-current-file)
+
+(setq dired-listing-switches
+      ;;list file sizes given in “human-readable” format (i.e. in units of B,
+      ;;K, M, G as appropriate).
+      "-alh")
+
 (define-key global-map [(control meta shift R)] 'sudo-edit-current-file)
 
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(package-selected-packages
-   (quote
-    (geiser ox-gfm ox-pandoc constants zenburn-theme yaml-mode use-package sx smart-mode-line projectile polymode paradox pandoc-mode ox-reveal org-tree-slide org-screenshot org-pdfview org-pandoc org-bullets org-ac n3-mode magit inf-ruby htmlize hc-zenburn-theme gist epresent enh-ruby-mode elpy ein-mumamo edit-server cask bbyac auto-install auto-compile async)))
- '(safe-local-variable-values
-   (quote
-    ((bug-reference-bug-regexp . "<https?://\\(debbugs\\|bugs\\)\\.gnu\\.org/\\([0-9]+\\)>")))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;;; Stefan Monnier <foo at acm.org>. It is the opposite of fill-paragraph    
+(defun unfill-paragraph (&optional region)
+  "Takes a multi-line paragraph and makes it into a single line of text."
+  (interactive (progn (barf-if-buffer-read-only) '(t)))
+  (let ((fill-column (point-max))
+	;; This would override `fill-column' if it's an integer.
+	(emacs-lisp-docstring-fill-column t))
+    (fill-paragraph nil region)))
+    ;; Handy key definition
+(define-key global-map "\M-Q" 'unfill-paragraph)
+
 
 (put 'downcase-region 'disabled nil)
 (custom-set-faces
@@ -981,35 +2099,327 @@
  ;; If there is more than one, they won't work right.
  )
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(use-package projectile :ensure t
-  :config (projectile-global-mode))
+;; (use-package projectile
+;;   :config (projectile-global-mode))
 
-;;(use-package cask :ensure t)
+;;(use-package cask)
 
-(use-package elpy :ensure t
+
+;;(use-package elpy
+  ;;ERROR: require: Symbol’s value as variable is void: xref-location-marker
   ;; python: http://elpy.readthedocs.org/en/latest/index.html
   ;; https://github.com/jorgenschaefer/elpy http://elpy.readthedocs.org/en/latest/index.html
-  :config (elpy-enable))
+  ;;:config (elpy-enable))
 
-(use-package python
+(use-package python 
   ;; The package is "python" but the mode is "python-mode":
   :mode ("\\.py\\'" . python-mode)
   :interpreter ("python" . python-mode))
 
-(use-package sx :ensure t
+(use-package sx
   ;; stack-exchange client in emacs
   )
 
-(use-package pdf-tools :ensure t
-  ;; cf: https://github.com/politza/pdf-tools
-  ;; NB - to update this package - delete it and run this again.
-  :config (progn
-	    (pdf-tools-install)
-	    (eval-after-load 'org '(require 'org-pdfview))
-	    (add-to-list 'org-file-apps '("\\.pdf\\'" . org-pdfview-open))
-	    (add-to-list 'org-file-apps '("\\.pdf::\\([[:digit:]]+\\)\\'" . org-pdfview-open))
-	    ))
+(use-package multiple-cursors)
+(use-package dna-mode)
+
+;;(load "~/.dotfiles/emacs/.emacs.d/Adding-keymaps-to-src-blocks-via-org-font-lock-hook.el")
+
+;;(use-package helm)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; git clone https://github.com/jkitchin/scimax.git
+;; add-to-load-path/scimax
+;;
+
+(use-package ob-ipython)
+;;(use-package lispy)
+
+;; (setq scimax-dir
+;;       ;; require fails without this!
+;;       "~mec/.dotfiles/emacs/.emacs.d/add-to-load-path/scimax")
+;; (push scimax-dir load-path)
+;; (require 'scimax-org)			; that's all for now but theres lots of other goodies in there.
+;; (add-hook 'org-mode-hook 'scimax-autoformat-mode)
+;; (add-to-list 'scimax-src-block-keymaps 
+;; 	     ;; (setf (alist-get "R"  scimax-src-block-keymaps) 
+;; 	     `("R" . (let ((map (make-composed-keymap (, ess-mode-map org-mode-map))))
+;; 		       (define-key map (kbd "C-c C-c") 'org-ctrl-c-ctrl-c)
+;; 		       (define-key map (kbd "C-c '") 'org-edit-special)
+;; 		       map)))
 
 
+;;(setq scimax-src-block-keymaps nil)
+;;(mapcar 'car scimax-src-block-keymaps)
+
+(use-package define-word
+  ;; TODO - change to hyerp (H) if I can get working: https://unix.stackexchange.com/questions/91743/can-i-change-caps-lock-to-hyper-additional-modifier
+  ;; try next https://www.youtube.com/watch?v=W9_H_M-H-a4
+  :bind (
+	 ("H-d" . define-word-at-point)
+         ("H-D" . define-word)
+	 ))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (use-package dumb-jump
+;;   ;;
+;;   :bind (("M-g o" . dumb-jump-go-other-window)
+;;          ("M-g j" . dumb-jump-go)
+;;          ("M-g b" . dumb-jump-back)
+;;          ("M-g q" . dumb-jump-quick-look)
+;;          ("M-g x" . dumb-jump-go-prefer-external)
+;;          ("M-g z" . dumb-jump-go-prefer-external-other-window))
+;;   ;:config (setq dumb-jump-selector 'ivy)
+;;   )
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;(use-package elfeed) ;; triggers on quit emacs error: "Invalid extended read marker at head of #s list (only hash-table allowed)"
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(setq browse-url-browser-function 'browse-url-default-browser) ; either firefox or chrome, depending on host
+
+;; (setq browse-url-browser-function 'browse-url-generic
+;;        browse-url-generic-program "google-chrome")
 
 
+;;eww-browse-url
+;; for more eww ideas:  http://pragmaticemacs.com/emacs/to-eww-or-not-to-eww/
+
+;(desktop-save-mode (y-or-n-p "desktop save mode?"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; todo: switch to using orgmode to manage init.el, a la: https://github.com/ftvkyo2011/.emacs.d/blob/master/init.el
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (custom-set-variables
+;;  ;; custom-set-variables was added by Custom.
+;;  ;; If you edit it by hand, you could mess it up, so be careful.
+;;  ;; Your init file should contain only one such instance.
+;;  ;; If there is more than one, they won't work right.
+;;  '(package-selected-packages
+;;    (quote
+;;     (ob-sql org-onenote org-notebook auto-complete company-mode sparql-mode python-mode poly-noweb poly-markdown sqlind sql-ident sql-indent ox-gfm ox-impress-js ox-ioslide ox-reveal ox-tufte hide-mode-line org-present ox-qmd ox-md poly-R poly-org define-word ob-ipython dna-mode multiple-cursors sx nodejs-repl js2-mode lua-mode yaml-mode enh-ruby-mode rspec-mode yard-mode robe ruby-tools rbenv inf-ruby gist markdown-mode pandoc-mode auto-compile smart-mode-line edit-server ox-clip orglink org-download org-tree-slide ox-pandoc ox-twbs org-attach-screenshot org-pdfview org-plus-contrib ess use-package)))
+;;  '(safe-local-variable-values
+;;    (quote
+;;     ((org-export-allow-BIND . t)
+;;      (org-export-use-babel . t)
+;;      (eval setq asdf "asdfasdf")
+;;      (org-export-allow-bind-keywords . t)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (use-package projectile
+;;   :config (projectile-global-mode))
+
+;;(use-package cask)
+
+
+;;(use-package elpy
+  ;;ERROR: require: Symbol’s value as variable is void: xref-location-marker
+  ;; python: http://elpy.readthedocs.org/en/latest/index.html
+  ;; https://github.com/jorgenschaefer/elpy http://elpy.readthedocs.org/en/latest/index.html
+  ;;:config (elpy-enable))
+
+(use-package python 
+  ;; The package is "python" but the mode is "python-mode":
+  :mode ("\\.py\\'" . python-mode)
+  :interpreter ("python" . python-mode))
+
+(use-package sx
+  ;; stack-exchange client in emacs
+  )
+
+;;(use-package multiple-cursors)
+;;(use-package dna-mode)
+
+;;(load "~/.dotfiles/emacs/.emacs.d/Adding-keymaps-to-src-blocks-via-org-font-lock-hook.el")
+
+;;(use-package helm)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; git clone https://github.com/jkitchin/scimax.git
+;; add-to-load-path/scimax
+;;
+
+;;(use-package org-ref)
+(use-package ob-ipython)
+;;(use-package lispy)
+;; (setq scimax-dir
+;;       ;; require fails without this!
+;;       "~mec/.dotfiles/emacs/.emacs.d/add-to-load-path/scimax")
+;; (push scimax-dir load-path)
+;; (add-hook 'org-mode-hook 'scimax-autoformat-mode)
+;; (add-to-list 'scimax-src-block-keymaps 
+;; 	     ;; (setf (alist-get "R"  scimax-src-block-keymaps) 
+;; 	     `("R" . (let ((map (make-composed-keymap (, ess-mode-map org-mode-map))))
+;; 		       (define-key map (kbd "C-c C-c") 'org-ctrl-c-ctrl-c)
+;; 		       (define-key map (kbd "C-c '") 'org-edit-special)
+;; 		       map)))
+
+
+;;(setq scimax-src-block-keymaps nil)
+;;(mapcar 'car scimax-src-block-keymaps)
+
+(use-package define-word
+  ;; TODO - change to hyerp (H) if I can get working: https://unix.stackexchange.com/questions/91743/can-i-change-caps-lock-to-hyper-additional-modifier
+  ;; try next https://www.youtube.com/watch?v=W9_H_M-H-a4
+  :bind (
+	 ("H-d" . define-word-at-point)
+         ("H-D" . define-word)
+	 ))
+
+(use-package markdown-toc )
+(use-package sparql-mode
+  ;;(autoload 'sparql-mode "sparql-mode.el"  "Major mode for editing SPARQL files" t)
+  :mode "\\.sparql$"
+  :config nil ; other use-pacakges
+  :bind () ;
+  :init (progn
+	  ;;(add-to-list 'auto-mode-alist '("\\.sparql$" . sparql-mode))
+	  ;;(add-to-list 'auto-mode-alist '("\\.rq$" . sparql-mode))
+	  (org-babel-do-load-languages 'org-babel-load-languages '((sparql . t)))
+	  ))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (use-package dumb-jump
+;;   ;;
+;;   :bind (("M-g o" . dumb-jump-go-other-window)
+;;          ("M-g j" . dumb-jump-go)
+;;          ("M-g b" . dumb-jump-back)
+;;          ("M-g q" . dumb-jump-quick-look)
+;;          ("M-g x" . dumb-jump-go-prefer-external)
+;;          ("M-g z" . dumb-jump-go-prefer-external-other-window))
+;;   ;:config (setq dumb-jump-selector 'ivy)
+;;   )
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;(use-package elfeed) ;; triggers on quit emacs error: "Invalid extended read marker at head of #s list (only hash-table allowed)"
+
+;;(use-package   org-onenote) does NOT work as configured - only with microsoft live.com login.
+
+(use-package csv-mode
+  ;;  "Major mode for editing comma-separated value files."
+  :mode "\\.[Cc][Ss][Vv]\\'"
+  :commands (csv-mode))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(use-package ssh)			; esp usefull for funning R/ESS on remote server
+(add-hook 'ssh-mode-hook
+          (lambda ()
+            (setq ssh-directory-tracking-mode t)
+            (shell-dirtrack-mode t)
+            (setq dirtrackp nil)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(setq browse-url-browser-function 'browse-url-default-browser) ; either firefox or chrome, depending on host
+
+;; (setq browse-url-browser-function 'browse-url-generic
+;;        browse-url-generic-program "google-chrome")
+
+
+;;eww-browse-url
+;; for more eww ideas:  http://pragmaticemacs.com/emacs/to-eww-or-not-to-eww/
+
+;(desktop-save-mode (y-or-n-p "desktop save mode?"))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; BLOGGING
+;; todo: adopt [blog\-admin](https://github.com/xcodebuild/blog-admin) integration with [Nikola — Static Site Generator](https://getnikola.com/)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; todo: switch to using orgmode to manage init.el, a la: https://github.com/ftvkyo2011/.emacs.d/blob/master/init.el
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(set-fill-column 120)
+(setq fill-column 120)
+
+(use-package org-roam
+      :hook 
+      (after-init . org-roam-mode)
+      :custom
+      (org-roam-directory "~/org")
+      :bind (:map org-roam-mode-map
+              (("C-c n l" . org-roam)
+               ("C-c n f" . org-roam-find-file)
+               ("C-c n b" . org-roam-switch-to-buffer)
+               ("C-c n g" . org-roam-graph-show))
+              :map org-mode-map
+              (("C-c n i" . org-roam-insert))))
+
+;;(cancel-function-timers 'show-parent-function)
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ansi-color-names-vector
+   ["#212526" "#ff4b4b" "#b4fa70" "#fce94f" "#729fcf" "#e090d7" "#8cc4ff" "#eeeeec"])
+ '(compilation-message-face 'default)
+ '(cua-global-mark-cursor-color "#2aa198")
+ '(cua-normal-cursor-color "#839496")
+ '(cua-overwrite-cursor-color "#b58900")
+ '(cua-read-only-cursor-color "#859900")
+ '(custom-enabled-themes '(zenburn))
+ '(custom-safe-themes
+   '("0f0a4dca8bb029dc5139f447ff25bc3c18d31872c30a46d03c6bbc706ded3586" "604ac011fc9bd042bc041330b3a5e5a86e764a46f7e9fe13e2a1f9f83bf44327" "2809bcb77ad21312897b541134981282dc455ccd7c14d74cc333b6e549b824f3" "00445e6f15d31e9afaa23ed0d765850e9cd5e929be5e8e63b114a3346236c44c" "c433c87bd4b64b8ba9890e8ed64597ea0f8eb0396f4c9a9e01bd20a04d15d358" default))
+ '(fci-rule-color "#073642")
+ '(highlight-changes-colors '("#d33682" "#6c71c4"))
+ '(highlight-symbol-colors
+   '("#3b6b40f432d6" "#07b9463c4d36" "#47a3341e358a" "#1d873c3f56d5" "#2d86441c3361" "#43b7362d3199" "#061d417f59d7"))
+ '(highlight-symbol-foreground-color "#93a1a1")
+ '(highlight-tail-colors
+   '(("#073642" . 0)
+     ("#5b7300" . 20)
+     ("#007d76" . 30)
+     ("#0061a8" . 50)
+     ("#866300" . 60)
+     ("#992700" . 70)
+     ("#a00559" . 85)
+     ("#073642" . 100)))
+ '(hl-bg-colors
+   '("#866300" "#992700" "#a7020a" "#a00559" "#243e9b" "#0061a8" "#007d76" "#5b7300"))
+ '(hl-fg-colors
+   '("#002b36" "#002b36" "#002b36" "#002b36" "#002b36" "#002b36" "#002b36" "#002b36"))
+ '(hl-paren-colors '("#2aa198" "#b58900" "#268bd2" "#6c71c4" "#859900"))
+ '(lsp-ui-doc-border "#93a1a1")
+ '(nrepl-message-colors
+   '("#dc322f" "#cb4b16" "#b58900" "#5b7300" "#b3c34d" "#0061a8" "#2aa198" "#d33682" "#6c71c4"))
+ '(org-roam-directory "~/org")
+ '(package-selected-packages
+   '(org-roam ob-sql clojure-mode ejc-sql magit ob-python ob-sh ipython ox-latex pandoc-mode ess-site org-beautify-theme tango-plus-theme zenburn-themee solarized-theme ssh matlab-mode xclip zenburn-theme yard-mode yaml-mode use-package sx sparql-mode smart-mode-line ruby-tools rspec-mode robe rbenv poly-org poly-R ox-pandoc ox-clip orglink org-tree-slide org-ref org-present org-plus-contrib org-pdfview org-link-minor-mode org-download org-attach-screenshot ob-sql-mode ob-ipython nodejs-repl multiple-cursors markdown-toc lua-mode lorem-ipsum js2-mode hide-mode-line gist ess enh-ruby-mode edit-server dna-mode define-word csv-mode auto-package-update auto-compile))
+ '(pos-tip-background-color "#073642")
+ '(pos-tip-foreground-color "#93a1a1")
+ '(safe-local-variable-values
+   '((org-allow-BIND . t)
+     (org-export-allow-BIND . t)
+     (org-export-allow-bind-keywords . t)))
+ '(smartrep-mode-line-active-bg (solarized-color-blend "#859900" "#073642" 0.2))
+ '(term-default-bg-color "#002b36")
+ '(term-default-fg-color "#839496")
+ '(vc-annotate-background nil)
+ '(vc-annotate-background-mode nil)
+ '(vc-annotate-color-map
+   '((20 . "#dc322f")
+     (40 . "#cb4366eb20b4")
+     (60 . "#c1167942154f")
+     (80 . "#b58900")
+     (100 . "#a6ae8f7c0000")
+     (120 . "#9ed892380000")
+     (140 . "#96be94cf0000")
+     (160 . "#8e5397440000")
+     (180 . "#859900")
+     (200 . "#77679bfc4635")
+     (220 . "#6d449d465bfd")
+     (240 . "#5fc09ea47092")
+     (260 . "#4c68a01784aa")
+     (280 . "#2aa198")
+     (300 . "#303498e7affc")
+     (320 . "#2fa1947cbb9b")
+     (340 . "#2c879008c736")
+     (360 . "#268bd2")))
+ '(vc-annotate-very-old-color nil)
+ '(weechat-color-list
+   '(unspecified "#002b36" "#073642" "#a7020a" "#dc322f" "#5b7300" "#859900" "#866300" "#b58900" "#0061a8" "#268bd2" "#a00559" "#d33682" "#007d76" "#2aa198" "#839496" "#657b83"))
+ '(xterm-color-names
+   ["#073642" "#dc322f" "#859900" "#b58900" "#268bd2" "#d33682" "#2aa198" "#eee8d5"])
+ '(xterm-color-names-bright
+   ["#002b36" "#cb4b16" "#586e75" "#657b83" "#839496" "#6c71c4" "#93a1a1" "#fdf6e3"]))

@@ -121,3 +121,7 @@ fi
 ### export PATH="/usr/local/heroku/bin:$PATH"
 for f in ${BASH_SOURCE}.d/*.sh; do source $f  ; done
 #source ~/.bash_profile
+
+
+
+export LC_ALL=C
